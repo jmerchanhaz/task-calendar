@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Panel ejecutivo de agenda y tareas — Google Calendar y Google Tasks en una sola vista.">
+<meta name="theme-color" content="#FFFFFF">
+<title>JMH · Advisory — Panel ejecutivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,600;1,6..72,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --font-serif:'Newsreader',Georgia,serif;
+  --font-sans:'DM Sans',system-ui,-apple-system,sans-serif;
+
+  --bg-primary:#FFFFFF;
+  --bg-surface:#FFFFFF;
+  --bg-subtle:#F4F6FA;
+
+  --text-primary:#0F1C2E;
+  --text-secondary:#4A5568;
+  --text-muted:#8896A8;
+  --text-inverse:#FFFFFF;
+
+  --accent:#1D3FB5;
+  --accent-light:#3557D6;
+  --accent-pale:#E9EDF9;
+
+  --alert:#A03A2B;
+  --alert-pale:#F7ECEA;
+  --ok:#2E6B4F;
+  --ok-pale:#EAF2ED;
+
+  --border:#DDE3EC;
+  --border-strong:#B8C4D4;
+
+  --shadow-sm:0 1px 3px rgba(15,28,46,.06),0 1px 2px rgba(15,28,46,.04);
+  --shadow-md:0 4px 12px rgba(15,28,46,.08),0 2px 4px rgba(15,28,46,.04);
+  --shadow-lg:0 12px 32px rgba(15,28,46,.10),0 4px 8px rgba(15,28,46,.05);
+
+  --space-xs:.5rem; --space-sm:1rem; --space-md:1.5rem;
+  --space-lg:2.5rem; --space-xl:4rem;
+
+  --text-xs:clamp(.7rem,1.5vw,.75rem);
+  --text-sm:clamp(.8rem,1.8vw,.875rem);
+  --text-base:clamp(.9rem,2vw,1rem);
+  --text-lg:clamp(1rem,2.2vw,1.125rem);
+  --text-xl:clamp(1.1rem,2.5vw,1.25rem);
+  --text-2xl:clamp(1.3rem,3vw,1.75rem);
+  --text-3xl:clamp(1.7rem,4.2vw,2.4rem);
+  --text-4xl:clamp(2rem,5.2vw,2.9rem);
+
+  --radius-sm:4px; --radius-md:8px; --radius-lg:12px;
+  --transition:200ms cubic-bezier(.4,0,.2,1);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{background:var(--bg-primary);color:var(--text-primary);font-family:var(--font-sans);
+  font-size:var(--text-base);line-height:1.7;min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:var(--accent-light);text-decoration:none;transition:color var(--transition)}
+a:hover{color:var(--accent)}
+button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit}
+:focus-visible{outline:2px solid var(--accent-light);outline-offset:3px;border-radius:var(--radius-sm)}
+
+.container{width:100%;max-width:1180px;margin:0 auto;padding:0 var(--space-md)}
+@media(min-width:768px){.container{padding:0 var(--space-lg)}}
+
+.label{font:700 var(--text-xs)/1 var(--font-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.label-muted{color:var(--text-muted)}
+.note{font:400 var(--text-sm)/1.5 var(--font-sans);color:var(--text-muted)}
+
+/* ---------- Nav ---------- */
+nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border)}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);
+  min-height:60px;padding:.6rem 0}
+.brand{font:700 var(--text-base)/1.2 var(--font-serif);letter-spacing:-.01em;white-space:nowrap}
+.brand span{color:var(--accent)}
+.nav-actions{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}
+
+.btn{display:inline-flex;align-items:center;gap:.45rem;padding:.55rem .9rem;border-radius:var(--radius-md);
+  font:500 var(--text-sm)/1 var(--font-sans);transition:all var(--transition);white-space:nowrap}
+.btn-primary{background:var(--accent);color:var(--text-inverse)}
+.btn-primary:hover{background:var(--accent-light)}
+.btn-ghost{border:1px solid var(--border);color:var(--text-secondary);background:var(--bg-surface)}
+.btn-ghost:hover{border-color:var(--border-strong);color:var(--text-primary)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.avatar{width:28px;height:28px;border-radius:50%;border:1px solid var(--border)}
+
+/* ---------- Header ---------- */
+header.hero{padding:var(--space-lg) 0 var(--space-md)}
+.hero-title{font:600 var(--text-3xl)/1.15 var(--font-serif);letter-spacing:-.015em}
+.hero-title em{font-style:italic;color:var(--accent)}
+.hero-sub{margin-top:.4rem;color:var(--text-secondary);font-size:var(--text-sm)}
+.status-line{margin-top:.9rem;display:flex;align-items:center;gap:.5rem;font-size:var(--text-xs);
+  color:var(--text-muted);letter-spacing:.04em}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted);flex:none}
+.dot.live{background:var(--ok)}
+.dot.demo{background:var(--accent)}
+
+/* ---------- Sections ---------- */
+.section{padding:var(--space-lg) 0}
+.section+.section{border-top:1px solid var(--border)}
+.section-header{margin-bottom:var(--space-md)}
+.section-title{font:600 var(--text-2xl)/1.2 var(--font-serif);letter-spacing:-.01em;margin-top:.15rem}
+.section-title em{font-style:italic;color:var(--accent)}
+
+/* ---------- Cards ---------- */
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:var(--space-md);box-shadow:var(--shadow-sm);transition:box-shadow var(--transition),transform var(--transition)}
+.card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.card-accent{border-left:3px solid var(--accent)}
+
+.grid-metrics{display:grid;gap:.75rem;grid-template-columns:repeat(2,1fr)}
+@media(min-width:900px){.grid-metrics{grid-template-columns:repeat(5,1fr)}}
+.metric{background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.9rem 1rem}
+.metric-value{font:700 var(--text-3xl)/1 var(--font-serif);margin:.35rem 0 .2rem}
+.metric.alert .metric-value{color:var(--alert)}
+.metric .note{font-size:var(--text-xs);line-height:1.35}
+
+.focus-card{border-left:3px solid var(--accent);background:var(--bg-subtle);border:1px solid var(--border);
+  border-left:3px solid var(--accent);border-radius:0 var(--radius-lg) var(--radius-lg) 0;padding:var(--space-md)}
+.focus-obj{font:600 var(--text-xl)/1.35 var(--font-serif);margin-top:.4rem}
+.focus-empty{color:var(--text-muted);font-style:italic;font-family:var(--font-serif)}
+
+.layout-split{display:grid;gap:var(--space-md);grid-template-columns:1fr}
+@media(min-width:960px){.layout-split{grid-template-columns:1.35fr 1fr;align-items:start}}
+
+/* ---------- Listas ---------- */
+.stack{display:flex;flex-direction:column;gap:.55rem}
+.item{display:flex;gap:.7rem;align-items:flex-start;padding:.7rem .85rem;border:1px solid var(--border);
+  border-radius:var(--radius-md);background:var(--bg-surface);transition:border-color var(--transition)}
+.item:hover{border-color:var(--border-strong)}
+.item.is-overdue{border-left:3px solid var(--alert)}
+.item.is-done{opacity:.5}
+.item.is-done .item-title{text-decoration:line-through}
+.check{flex:none;width:18px;height:18px;margin-top:.25rem;border:1.5px solid var(--border-strong);
+  border-radius:50%;transition:all var(--transition);position:relative}
+.check:hover{border-color:var(--accent);background:var(--accent-pale)}
+.check.done{background:var(--ok);border-color:var(--ok)}
+.check.done::after{content:'';position:absolute;left:5px;top:2px;width:4px;height:8px;
+  border:solid #fff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.item-body{min-width:0;flex:1}
+.item-title{font-size:var(--text-sm);line-height:1.45;font-weight:500;word-break:break-word}
+.item-meta{margin-top:.2rem;display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;
+  font-size:var(--text-xs);color:var(--text-muted)}
+
+.badge{display:inline-block;background:var(--accent-pale);color:var(--accent);
+  font:700 var(--text-xs)/1 var(--font-sans);letter-spacing:.07em;text-transform:uppercase;
+  padding:.32em .6em;border-radius:var(--radius-sm)}
+.badge-alert{background:var(--alert-pale);color:var(--alert)}
+.badge-muted{background:var(--bg-subtle);color:var(--text-muted)}
+.badge-ok{background:var(--ok-pale);color:var(--ok)}
+
+.item-actions{display:flex;gap:.2rem;flex:none;align-self:flex-start;margin-top:.05rem}
+.mark{width:28px;height:28px;border-radius:var(--radius-sm);display:grid;place-items:center;
+  font-size:.85rem;line-height:1;color:var(--text-muted);border:1px solid transparent;
+  transition:all var(--transition);opacity:.45}
+.item:hover .mark,.mark.on{opacity:1}
+.mark:hover{background:var(--accent-pale);color:var(--accent);border-color:var(--accent-pale)}
+.mark.on{color:var(--accent);background:var(--accent-pale)}
+.mark.busy{opacity:.3;pointer-events:none}
+.focus-actions{margin-top:.7rem;display:flex;gap:.4rem;flex-wrap:wrap}
+.btn-tiny{padding:.35rem .65rem;font-size:var(--text-xs);border:1px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--text-secondary);background:var(--bg-surface)}
+.btn-tiny:hover{border-color:var(--border-strong);color:var(--text-primary)}
+
+.col-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;
+  padding-bottom:.5rem;margin-bottom:.75rem;border-bottom:1px solid var(--border)}
+.col-count{font:700 var(--text-sm)/1 var(--font-serif);color:var(--text-muted)}
+.grid-board{display:grid;gap:var(--space-md);grid-template-columns:1fr}
+@media(min-width:700px){.grid-board{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1100px){.grid-board{grid-template-columns:repeat(4,1fr)}}
+
+.empty{font-size:var(--text-sm);color:var(--text-muted);font-style:italic;padding:.4rem 0}
+
+/* ---------- Agenda ---------- */
+.ev{display:grid;grid-template-columns:64px 1fr;gap:.75rem;padding:.7rem 0;border-bottom:1px solid var(--border)}
+.ev:last-child{border-bottom:none}
+.ev-time{font:700 var(--text-xs)/1.4 var(--font-sans);letter-spacing:.03em;color:var(--accent);padding-top:.15rem}
+.ev-time small{display:block;font-weight:400;color:var(--text-muted);letter-spacing:0}
+.ev-title{font-size:var(--text-sm);font-weight:500;line-height:1.4}
+.ev-meta{font-size:var(--text-xs);color:var(--text-muted);margin-top:.1rem}
+.ev.now{background:var(--accent-pale);border-radius:var(--radius-sm);padding-left:.6rem;padding-right:.6rem}
+
+/* ---------- Carga ---------- */
+.load-bar{height:8px;background:var(--bg-subtle);border-radius:99px;overflow:hidden;margin-top:.6rem;
+  border:1px solid var(--border)}
+.load-fill{height:100%;background:var(--accent);transition:width 600ms var(--transition)}
+.load-fill.over{background:var(--alert)}
+
+/* ---------- Tabla ---------- */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;min-width:460px}
+th{font:700 var(--text-xs)/1 var(--font-sans);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text-muted);padding:.7rem .8rem;border-bottom:2px solid var(--border);text-align:left}
+td{padding:.7rem .8rem;border-bottom:1px solid var(--border);color:var(--text-secondary);font-size:var(--text-sm)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+td.strong{color:var(--text-primary);font-weight:500}
+
+/* ---------- Chart ---------- */
+.chart{width:100%;height:auto;display:block;margin-top:.5rem}
+.chart-legend{display:flex;gap:1rem;flex-wrap:wrap;font-size:var(--text-xs);color:var(--text-muted);margin-top:.5rem}
+.seg{display:inline-flex;gap:.35rem;align-items:center}
+.swatch{width:10px;height:10px;border-radius:2px;flex:none}
+
+.tabs{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
+.tab{padding:.4rem .8rem;font-size:var(--text-xs);font-weight:500;color:var(--text-secondary);
+  background:var(--bg-surface);transition:all var(--transition)}
+.tab.active{background:var(--accent);color:var(--text-inverse)}
+
+/* ---------- Modal ---------- */
+.overlay{position:fixed;inset:0;background:rgba(15,28,46,.45);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;padding:var(--space-sm);z-index:200}
+.overlay.open{display:flex}
+.modal{background:var(--bg-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);
+  max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:var(--space-md)}
+.modal h3{font:600 var(--text-2xl)/1.2 var(--font-serif);margin:.3rem 0 .6rem}
+.modal h3 em{font-style:italic;color:var(--accent)}
+.modal ol{margin:.8rem 0 .8rem 1.1rem;font-size:var(--text-sm);color:var(--text-secondary)}
+.modal li{margin-bottom:.4rem}
+.modal code{background:var(--bg-subtle);padding:.12em .4em;border-radius:var(--radius-sm);
+  font-size:.85em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text-primary);word-break:break-all}
+.field{margin:.7rem 0}
+.field label{display:block;font:700 var(--text-xs)/1 var(--font-sans);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--text-muted);margin-bottom:.35rem}
+.field input{width:100%;padding:.6rem .7rem;border:1px solid var(--border);border-radius:var(--radius-md);
+  font-family:var(--font-sans);font-size:var(--text-sm);color:var(--text-primary);background:var(--bg-surface)}
+.field input:focus{outline:none;border-color:var(--accent)}
+.modal-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:var(--space-sm)}
+.modal-close{float:right;color:var(--text-muted);font-size:1.2rem;line-height:1}
+
+.steps{display:flex;gap:.4rem;margin:.9rem 0 1.1rem}
+.steps span{height:3px;flex:1;background:var(--border);border-radius:99px;transition:background var(--transition)}
+.steps span.on{background:var(--accent)}
+.step-head{display:flex;gap:.7rem;align-items:flex-start;margin-bottom:.8rem}
+.step-num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;
+  display:grid;place-items:center;font:700 var(--text-xs)/1 var(--font-sans)}
+.step-head strong{font:600 var(--text-lg)/1.3 var(--font-serif)}
+.step-head .note{margin-top:.15rem}
+.link-list{display:flex;flex-direction:column;gap:.45rem;margin:.6rem 0 1rem}
+.link-list .btn{justify-content:space-between;width:100%}
+.copyrow{display:flex;gap:.6rem;align-items:center;justify-content:space-between;
+  background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:.65rem .75rem;margin:.6rem 0}
+.copyrow code{display:block;white-space:pre-wrap;word-break:break-all;background:none;padding:0;
+  font-size:.78rem;line-height:1.5;margin-top:.25rem}
+.copybtn{flex:none;padding:.4rem .7rem}
+.persist{border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem}
+
+.toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%) translateY(120%);
+  background:var(--text-primary);color:var(--text-inverse);padding:.65rem 1.1rem;border-radius:var(--radius-md);
+  font-size:var(--text-sm);box-shadow:var(--shadow-lg);z-index:300;transition:transform 300ms var(--transition);
+  max-width:calc(100vw - 2rem);text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+footer{border-top:1px solid var(--border);padding:var(--space-lg) 0;margin-top:var(--space-md)}
+.footer-brand{font:700 var(--text-lg)/1.2 var(--font-serif)}
+.footer-copy{font-size:var(--text-xs);color:var(--text-muted);margin-top:.35rem;letter-spacing:.04em}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.animate-in{animation:fadeUp .45s cubic-bezier(.4,0,.2,1) both}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <div class="brand">JMH · <span>Advisory</span></div>
+    <div class="nav-actions">
+      <img id="avatar" class="avatar hidden" alt="" referrerpolicy="no-referrer">
+      <button id="btnRefresh" class="btn btn-ghost hidden">Actualizar</button>
+      <button id="btnDemo" class="btn btn-ghost">Ver ejemplo</button>
+      <button id="btnLogin" class="btn btn-primary">Entrar con Google</button>
+      <button id="btnLogout" class="btn btn-ghost hidden">Salir</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <span class="label">Panel ejecutivo</span>
+    <h1 class="hero-title" id="greeting">Agenda &amp; <em>ejecución</em></h1>
+    <p class="hero-sub" id="dateLine"></p>
+    <div class="status-line"><span class="dot" id="statusDot"></span><span id="statusText">Sin conectar — los datos no salen de tu navegador</span></div>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPIs -->
+  <section class="section" aria-labelledby="t-kpi">
+    <div class="container">
+      <div class="section-header">
+        <span class="label label-muted">Indicadores</span>
+        <h2 class="section-title" id="t-kpi">Cinco <em>señales</em></h2>
+      </div>
+      <div class="grid-metrics" id="kpis"></div>
+    </div>
+  </section>
+
+  <!-- Foco + agenda -->
+  <section class="section" aria-labelledby="t-foco">
+    <div class="container">
+      <div class="layout-split">
+        <div>
+          <div class="section-header">
+            <span class="label label-muted">Disciplina 5·3·1</span>
+            <h2 class="section-title" id="t-foco">Foco del <em>día</em></h2>
+          </div>
+          <div class="focus-card" id="focusCard"></div>
+          <div style="margin-top:var(--space-md)">
+            <div class="col-head"><span class="label label-muted">Tres prioridades</span></div>
+            <div class="stack" id="priorities"></div>
+          </div>
+        </div>
+        <div>
+          <div class="section-header">
+            <span class="label label-muted">Calendario</span>
+            <h2 class="section-title">Agenda de <em>hoy</em></h2>
+          </div>
+          <div class="card">
+            <div id="agenda"></div>
+            <div style="margin-top:var(--space-sm)">
+              <div class="note" id="loadNote"></div>
+              <div class="load-bar"><div class="load-fill" id="loadFill" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tablero -->
+  <section class="section" aria-labelledby="t-board">
+    <div class="container">
+      <div class="section-header">
+        <span class="label label-muted">Tareas</span>
+        <h2 class="section-title" id="t-board">Tablero de <em>ejecución</em></h2>
+        <p class="note">Marca el círculo para completar · <strong>★</strong> fija una prioridad · <strong>◎</strong> fija el objetivo del día. Todo se guarda en Google Tasks.</p>
+      </div>
+      <div class="grid-board" id="board"></div>
+    </div>
+  </section>
+
+  <!-- Tendencia -->
+  <section class="section" aria-labelledby="t-trend">
+    <div class="container">
+      <div class="section-header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap">
+        <div>
+          <span class="label label-muted">Tracking</span>
+          <h2 class="section-title" id="t-trend">Ritmo de <em>cierre</em></h2>
+        </div>
+        <div class="tabs" role="group" aria-label="Rango del gráfico">
+          <button class="tab active" data-range="7">7 días</button>
+          <button class="tab" data-range="14">14 días</button>
+          <button class="tab" data-range="30">30 días</button>
+        </div>
+      </div>
+      <div class="card">
+        <div id="chartWrap"></div>
+        <div class="chart-legend">
+          <span class="seg"><span class="swatch" style="background:var(--accent)"></span>Tareas completadas</span>
+          <span class="seg"><span class="swatch" style="background:var(--border-strong)"></span>Horas en calendario</span>
+        </div>
+        <p class="note" style="margin-top:.6rem">Google Tasks conserva un historial limitado de tareas completadas; los días más antiguos pueden aparecer subestimados.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Carga por proyecto -->
+  <section class="section" aria-labelledby="t-proj">
+    <div class="container">
+      <div class="section-header">
+        <span class="label label-muted">Distribución</span>
+        <h2 class="section-title" id="t-proj">Carga por <em>proyecto</em></h2>
+        <p class="note">Escribe la duración estimada entre corchetes en el título o las notas — <code style="font-size:.85em">[2h]</code>, <code style="font-size:.85em">[90m]</code> — para que el panel sume horas.</p>
+      </div>
+      <div class="card table-wrap">
+        <table id="projTable">
+          <thead><tr>
+            <th>Proyecto</th><th class="num">Abiertas</th><th class="num">Vencidas</th>
+            <th class="num">Esta semana</th><th class="num">Horas est.</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <div class="footer-brand">JMH · Advisory</div>
+    <div class="footer-copy">JAIRON MERCHÁN HAZ | JMH · ADVISORY | JMERCHANHAZ.COM</div>
+    <p class="note" style="margin-top:.8rem;max-width:60ch">Este panel funciona íntegramente en tu navegador. Lee tu calendario y tus tareas directamente desde Google y no envía tu información a ningún servidor intermedio.</p>
+  </div>
+</footer>
+
+<!-- Asistente de configuración -->
+<div class="overlay" id="setupModal" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+  <div class="modal">
+    <button class="modal-close" id="setupClose" aria-label="Cerrar">✕</button>
+    <span class="label">Configuración · una sola vez</span>
+    <h3 id="setupTitle">Conectar con <em>Google</em></h3>
+    <p class="note">Unos 4 minutos. Google exige que cada copia del panel se registre con su propia
+      credencial; por eso estos pasos no se pueden saltar.</p>
+
+    <div class="steps" id="stepDots"></div>
+
+    <!-- PASO 1 -->
+    <div class="step" data-step="1">
+      <div class="step-head"><span class="step-num">1</span><div>
+        <strong>Crea el proyecto y activa las dos APIs</strong>
+        <p class="note">Cada enlace abre la pantalla exacta. Vuelve aquí al terminar.</p></div></div>
+      <div class="link-list">
+        <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://console.cloud.google.com/projectcreate">Crear proyecto ↗</a>
+        <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com">Activar Calendar API ↗</a>
+        <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://console.cloud.google.com/apis/library/tasks.googleapis.com">Activar Tasks API ↗</a>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" data-go="2">Hecho, siguiente →</button>
+        <button class="btn btn-ghost" id="setupDemo">Ver ejemplo</button>
+      </div>
+    </div>
+
+    <!-- PASO 2 -->
+    <div class="step hidden" data-step="2">
+      <div class="step-head"><span class="step-num">2</span><div>
+        <strong>Crea la credencial</strong>
+        <p class="note">Pantalla de consentimiento tipo <em>Externo</em>, luego cliente de tipo
+          <em>Aplicación web</em>.</p></div></div>
+      <div class="link-list">
+        <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://console.cloud.google.com/auth/overview">Pantalla de consentimiento ↗</a>
+        <a class="btn btn-ghost" target="_blank" rel="noopener" href="https://console.cloud.google.com/auth/clients/create">Crear cliente OAuth ↗</a>
+      </div>
+
+      <div class="copyrow">
+        <div>
+          <span class="label label-muted">Orígenes de JavaScript autorizados</span>
+          <code id="originHint"></code>
+        </div>
+        <button class="btn btn-ghost copybtn" data-copy="#originHint">Copiar</button>
+      </div>
+
+      <div class="copyrow">
+        <div>
+          <span class="label label-muted">Ámbitos a declarar</span>
+          <code id="scopeHint">https://www.googleapis.com/auth/calendar.readonly
+https://www.googleapis.com/auth/tasks</code>
+        </div>
+        <button class="btn btn-ghost copybtn" data-copy="#scopeHint">Copiar</button>
+      </div>
+
+      <p class="note">Añade tu correo como <strong>usuario de prueba</strong> en la pantalla de
+        consentimiento; si no, Google bloqueará el acceso.</p>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" data-go="3">Ya tengo el ID →</button>
+        <button class="btn btn-ghost" data-go="1">← Atrás</button>
+      </div>
+    </div>
+
+    <!-- PASO 3 -->
+    <div class="step hidden" data-step="3">
+      <div class="step-head"><span class="step-num">3</span><div>
+        <strong>Pega el ID de cliente</strong>
+        <p class="note">Es público por diseño: no es una contraseña.</p></div></div>
+      <div class="field">
+        <label for="clientIdInput">OAuth Client ID</label>
+        <input id="clientIdInput" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+               placeholder="123456789-xxxx.apps.googleusercontent.com">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="setupSave">Conectar →</button>
+        <button class="btn btn-ghost" data-go="2">← Atrás</button>
+      </div>
+
+      <div class="persist hidden" id="persistBox">
+        <span class="label">Para no repetirlo en cada dispositivo</span>
+        <p class="note">Abre <code>config.js</code> en tu repositorio, reemplaza la línea del
+          <code>clientId</code> por esta y guarda. GitHub Pages la publicará sola.</p>
+        <div class="copyrow">
+          <code id="persistLine"></code>
+          <button class="btn btn-ghost copybtn" data-copy="#persistLine">Copiar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="config.js" onerror="window.JMH_CONFIG=window.JMH_CONFIG||{}"></script>
+<script>
+/* ==========================================================================
+   PANEL EJECUTIVO — Google Calendar + Google Tasks
+   Sin servidor. Sin base de datos. No edites este archivo:
+   toda la configuración vive en config.js.
+   ========================================================================== */
+const CFG = window.JMH_CONFIG || {};
+
+const SCOPES = [
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/tasks",
+  "openid","email","profile"
+].join(" ");
+
+const JORNADA_HORAS = Number(CFG.jornadaHoras) || 8;
+const DIAS_CALENDARIO_ADELANTE = 14;
+const DIAS_CALENDARIO_ATRAS = 30;
+
+/* ------------------------- Estado ------------------------- */
+const S = {
+  token:null, expiry:0, demo:false, profile:null,
+  lists:[], tasks:[], events:[], range:7, tokenClient:null
+};
+
+/* ------------------------- Utilidades ------------------------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const pad = n => String(n).padStart(2,'0');
+const keyOf = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const TODAY = keyOf(new Date());
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
+function startOfDay(d){const x=new Date(d);x.setHours(0,0,0,0);return x;}
+
+function endOfWeekKey(){                    // domingo de la semana en curso
+  const t=new Date(); const dow=(t.getDay()+6)%7;   // 0 = lunes
+  return keyOf(addDays(t,6-dow));
+}
+const WEEK_END = endOfWeekKey();
+
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),3200);
+}
+
+function fmtHM(h){
+  if(!h) return '0 h';
+  const H=Math.floor(h), M=Math.round((h-H)*60);
+  return M ? `${H} h ${M} min` : `${H} h`;
+}
+
+/* Duración estimada escrita como [2h] / [90m] / [1.5h] */
+function parseDur(txt){
+  const m=/\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]/i.exec(txt||'');
+  if(!m) return 0;
+  const v=parseFloat(m[1].replace(',','.'));
+  return /^m/i.test(m[2]) ? v/60 : v;
+}
+const isPriority = t => /\[p\]|⭐|★/i.test(`${t.title||''} ${t.notes||''}`);
+const isFocus    = t => /\[1\]|#foco/i.test(`${t.title||''} ${t.notes||''}`);
+const cleanTitle = t => (t.title||'(sin título)')
+  .replace(/\[(p|1)\]/gi,'').replace(/\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]/gi,'')
+  .replace(/#foco/gi,'').replace(/[⭐★]/g,'').replace(/\s{2,}/g,' ').trim();
+
+/* Google Tasks devuelve `due` en UTC a medianoche: usamos la porción de fecha */
+const dueKey = t => t.due ? t.due.slice(0,10) : null;
+
+/* ------------------------- OAuth ------------------------- */
+function getClientId(){
+  return (CFG.clientId||'').trim() || localStorage.getItem('jmh_client_id') || '';
+}
+
+function initTokenClient(){
+  const cid=getClientId();
+  if(!cid || !window.google?.accounts?.oauth2) return false;
+  S.tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: cid,
+    scope: SCOPES,
+    callback: (resp)=>{
+      if(resp.error){
+        if(!S.silent) toast(diagnose(resp.error));
+        S.silent=false; return;
+      }
+      S.silent=false;
+      S.token = resp.access_token;
+      S.expiry = Date.now() + (Number(resp.expires_in||3600)-60)*1000;
+      sessionStorage.setItem('jmh_tok', JSON.stringify({t:S.token,e:S.expiry}));
+      localStorage.setItem('jmh_connected','1');
+      S.demo=false;
+      loadAll();
+    }
+  });
+  return true;
+}
+
+function login(){
+  if(!S.tokenClient && !initTokenClient()){ openSetup(); return; }
+  S.tokenClient.requestAccessToken({prompt:'consent'});
+}
+
+function silentLogin(){
+  const raw=sessionStorage.getItem('jmh_tok');
+  if(raw){
+    try{ const {t,e}=JSON.parse(raw);
+      if(t && e>Date.now()){ S.token=t; S.expiry=e; loadAll(); return true; }
+    }catch(_){}
+  }
+  if(S.tokenClient && localStorage.getItem('jmh_connected')==='1'){
+    S.silent=true; S.tokenClient.requestAccessToken({prompt:''}); return true;
+  }
+  return false;
+}
+
+function logout(){
+  if(S.token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(S.token,()=>{});
+  S.token=null; S.expiry=0; S.profile=null; S.tasks=[]; S.events=[]; S.lists=[];
+  sessionStorage.removeItem('jmh_tok');
+  localStorage.removeItem('jmh_connected');
+  setAuthUI(false); renderDemo();
+  toast('Sesión cerrada');
+}
+
+/* ------------------------- API ------------------------- */
+async function api(url){
+  const r = await fetch(url,{headers:{Authorization:'Bearer '+S.token}});
+  if(r.status===401){ sessionStorage.removeItem('jmh_tok'); throw new Error('Sesión expirada'); }
+  if(!r.ok) throw new Error(`Google respondió ${r.status}`);
+  return r.json();
+}
+
+async function apiPaged(url, key='items', maxPages=5){
+  let out=[], page=null, i=0;
+  do{
+    const u = url + (page ? (url.includes('?')?'&':'?')+'pageToken='+page : '');
+    const d = await api(u);
+    out = out.concat(d[key]||[]);
+    page = d.nextPageToken; i++;
+  } while(page && i<maxPages);
+  return out;
+}
+
+async function fetchProfile(){
+  try{ S.profile = await api('https://www.googleapis.com/oauth2/v3/userinfo'); }catch(_){ S.profile=null; }
+}
+
+async function fetchTasks(){
+  const lists = await apiPaged('https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=100');
+  S.lists = lists;
+  const all = [];
+  for(const l of lists){
+    const items = await apiPaged(
+      `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(l.id)}/tasks`+
+      `?maxResults=100&showCompleted=true&showHidden=true`);
+    items.forEach(t=>{ t._list=l.title; t._listId=l.id; });
+    all.push(...items);
+  }
+  S.tasks = all.filter(t=>!t.deleted);
+}
+
+async function fetchEvents(){
+  const cals = await apiPaged('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100');
+  const active = cals.filter(c=>c.selected!==false);
+  const timeMin = startOfDay(addDays(new Date(),-DIAS_CALENDARIO_ATRAS)).toISOString();
+  const timeMax = startOfDay(addDays(new Date(),DIAS_CALENDARIO_ADELANTE+1)).toISOString();
+  const all=[];
+  for(const c of active){
+    try{
+      const evs = await apiPaged(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(c.id)}/events`+
+        `?singleEvents=true&orderBy=startTime&maxResults=250`+
+        `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`);
+      evs.forEach(e=>{ e._cal=c.summary; });
+      all.push(...evs.filter(e=>e.status!=='cancelled'));
+    }catch(_){ /* un calendario sin permiso no debe romper el panel */ }
+  }
+  S.events = all.sort((a,b)=>(a.start?.dateTime||a.start?.date||'').localeCompare(b.start?.dateTime||b.start?.date||''));
+}
+
+/* --------- Marcado de prioridad y foco desde el propio panel --------- */
+const MARK={ prio:{re:/\[p\]|[⭐★]/gi, tag:'[P]'}, focus:{re:/\[1\]|#foco/gi, tag:'[1]'} };
+const tidy = s => (s||'').replace(/\s{2,}/g,' ').trim();
+
+async function patchTask(t, fields){
+  if(S.demo){ Object.assign(t, fields); return true; }
+  const url=`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(t._listId)}/tasks/${encodeURIComponent(t.id)}`;
+  const r=await fetch(url,{method:'PATCH',
+    headers:{Authorization:'Bearer '+S.token,'Content-Type':'application/json'},
+    body:JSON.stringify(fields)});
+  if(!r.ok) throw new Error('Google respondió '+r.status);
+  Object.assign(t, fields);
+  return true;
+}
+
+/* Quita la marca del título y de las notas */
+function unmark(t, kind){
+  const m=MARK[kind];
+  return { title: tidy(String(t.title||'').replace(m.re,'')),
+           notes: tidy(String(t.notes||'').replace(m.re,'')) };
+}
+function mark(t, kind){
+  const cleaned=unmark(t,kind);
+  return { title: tidy(`${MARK[kind].tag} ${cleaned.title}`), notes: cleaned.notes };
+}
+
+async function toggleMark(t, kind, btn){
+  btn?.classList.add('busy');
+  try{
+    const on = kind==='prio' ? isPriority(t) : isFocus(t);
+    if(on){
+      await patchTask(t, unmark(t,kind));
+    }else{
+      if(kind==='prio'){
+        const n=S.tasks.filter(x=>x.status!=='completed' && isPriority(x)).length;
+        if(n>=3){ toast('Ya tienes tres prioridades. Libera una primero.'); return; }
+      }
+      if(kind==='focus'){                       // el foco es único: libera el anterior
+        for(const other of S.tasks.filter(x=>x!==t && isFocus(x)))
+          await patchTask(other, unmark(other,'focus'));
+      }
+      await patchTask(t, mark(t,kind));
+    }
+    if(S.demo) toast('Modo ejemplo: no se escribe en Google');
+    renderAll();
+  }catch(e){ toast('No se pudo guardar: '+e.message); }
+  finally{ btn?.classList.remove('busy'); }
+}
+
+async function completeTask(t, el){
+  try{
+    await patchTask(t,{status:'completed', completed:new Date().toISOString()});
+    el?.classList.add('done');
+    toast(S.demo?'Modo ejemplo: no se escribe en Google':'Tarea completada en Google Tasks');
+    renderAll();
+  }catch(e){ toast('No se pudo completar: '+e.message); }
+}
+
+/* ------------------------- Carga ------------------------- */
+async function loadAll(){
+  setAuthUI(true);
+  $('#statusText').textContent='Sincronizando con Google…';
+  try{
+    await fetchProfile();
+    await Promise.all([fetchTasks(), fetchEvents()]);
+    S.demo=false;
+    renderAll();
+    $('#statusDot').className='dot live';
+    $('#statusText').textContent=`Conectado · ${S.tasks.length} tareas · ${S.events.length} eventos · actualizado ${new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})}`;
+  }catch(e){
+    toast(e.message);
+    $('#statusText').textContent='Error de sincronización — '+e.message;
+    if(/expirada/i.test(e.message)) setAuthUI(false);
+  }
+}
+
+function setAuthUI(on){
+  $('#btnLogin').classList.toggle('hidden',on);
+  $('#btnLogout').classList.toggle('hidden',!on);
+  $('#btnRefresh').classList.toggle('hidden',!on);
+  $('#btnDemo').classList.toggle('hidden',on);
+}
+
+/* ------------------------- Cálculos ------------------------- */
+function buckets(){
+  const open=S.tasks.filter(t=>t.status!=='completed');
+  const overdue=open.filter(t=>dueKey(t) && dueKey(t)<TODAY);
+  const today=open.filter(t=>dueKey(t)===TODAY);
+  const week=open.filter(t=>{const d=dueKey(t); return d && d>TODAY && d<=WEEK_END;});
+  const later=open.filter(t=>{const d=dueKey(t); return !d || d>WEEK_END;});
+  return {open,overdue,today,week,later};
+}
+
+function eventsOn(dayKey){
+  return S.events.filter(e=>{
+    const s=e.start?.dateTime||e.start?.date; if(!s) return false;
+    return keyOf(new Date(s))===dayKey || (e.start?.date===dayKey);
+  });
+}
+function eventHours(list){
+  return list.reduce((a,e)=>{
+    if(!e.start?.dateTime) return a;                       // los de día completo no suman
+    const h=(new Date(e.end.dateTime)-new Date(e.start.dateTime))/3.6e6;
+    return a + (h>0 && h<24 ? h : 0);
+  },0);
+}
+function completedOn(dayKey){
+  return S.tasks.filter(t=>t.status==='completed' && t.completed && keyOf(new Date(t.completed))===dayKey).length;
+}
+
+/* ------------------------- Render ------------------------- */
+function renderAll(){ renderHeader(); renderKPIs(); renderFocus(); renderAgenda(); renderBoard(); renderChart(); renderProjects(); }
+
+function renderHeader(){
+  const h=new Date().getHours();
+  const saludo = h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches';
+  const nombre = S.profile?.given_name ? esc(S.profile.given_name) : '';
+  $('#greeting').innerHTML = nombre ? `${saludo}, <em>${nombre}</em>` : `Agenda &amp; <em>ejecución</em>`;
+  $('#dateLine').textContent = new Date().toLocaleDateString('es-EC',
+    {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  if(S.profile?.picture){ const a=$('#avatar'); a.src=S.profile.picture; a.classList.remove('hidden'); }
+}
+
+function renderKPIs(){
+  const b=buckets();
+  const evToday=eventsOn(TODAY).filter(e=>e.start?.dateTime);
+  const hCal=eventHours(evToday);
+  const hTask=b.today.reduce((a,t)=>a+parseDur(`${t.title} ${t.notes||''}`),0);
+  const carga=hCal+hTask;
+
+  let done7=0; for(let i=0;i<7;i++) done7+=completedOn(keyOf(addDays(new Date(),-i)));
+  let done30=0; for(let i=0;i<30;i++) done30+=completedOn(keyOf(addDays(new Date(),-i)));
+  const cumpl = (done30+b.overdue.length)>0 ? Math.round(done30/(done30+b.overdue.length)*100) : 0;
+
+  const cards=[
+    {v:b.overdue.length, l:'Vencidas', n:'Deuda de ejecución acumulada', alert:b.overdue.length>0},
+    {v:b.today.length,   l:'Vencen hoy', n:'Compromisos con fecha de hoy'},
+    {v:b.week.length,    l:'Resto de la semana', n:`Hasta el ${new Date(WEEK_END+'T12:00:00').toLocaleDateString('es-EC',{day:'numeric',month:'short'})}`},
+    {v:done7,            l:'Cerradas · 7 d', n:'Ritmo de la última semana'},
+    {v:cumpl+'%',        l:'Cumplimiento · 30 d', n:'Cerradas ÷ (cerradas + vencidas)'}
+  ];
+  $('#kpis').innerHTML = cards.map((c,i)=>`
+    <div class="metric ${c.alert?'alert':''} animate-in" style="animation-delay:${i*60}ms">
+      <span class="label ${c.alert?'':'label-muted'}">${c.l}</span>
+      <div class="metric-value">${c.v}</div>
+      <p class="note">${c.n}</p>
+    </div>`).join('');
+
+  const pct=Math.min(100,Math.round(carga/JORNADA_HORAS*100));
+  $('#loadFill').style.width=pct+'%';
+  $('#loadFill').classList.toggle('over',carga>JORNADA_HORAS);
+  $('#loadNote').innerHTML=`Carga comprometida hoy: <strong>${fmtHM(carga)}</strong> de ${JORNADA_HORAS} h `+
+    `<span class="note">(${fmtHM(hCal)} en calendario + ${fmtHM(hTask)} estimados en tareas)</span>`;
+}
+
+function taskHTML(t,{overdue=false}={}){
+  const d=dueKey(t);
+  const done=t.status==='completed';
+  const dur=parseDur(`${t.title} ${t.notes||''}`);
+  const fecha = d ? new Date(d+'T12:00:00').toLocaleDateString('es-EC',{day:'numeric',month:'short'}) : 'sin fecha';
+  const P=isPriority(t), F=isFocus(t);
+  return `<div class="item ${overdue?'is-overdue':''} ${done?'is-done':''}" data-id="${esc(t.id)}" data-list="${esc(t._listId||'')}">
+    <button class="check ${done?'done':''}" aria-label="Completar tarea"></button>
+    <div class="item-body">
+      <div class="item-title">${esc(cleanTitle(t))}</div>
+      <div class="item-meta">
+        <span class="badge badge-muted">${esc(t._list||'')}</span>
+        <span class="${overdue?'badge badge-alert':''}">${fecha}</span>
+        ${dur?`<span>· ${fmtHM(dur)}</span>`:''}
+        ${F?'<span class="badge">Foco</span>':''}
+      </div>
+    </div>
+    ${done?'':`<div class="item-actions">
+      <button class="mark ${P?'on':''}" data-act="prio" aria-pressed="${P}"
+        title="${P?'Quitar prioridad':'Marcar como prioridad'}">★</button>
+      <button class="mark ${F?'on':''}" data-act="focus" aria-pressed="${F}"
+        title="${F?'Quitar foco del día':'Fijar como objetivo del día'}">◎</button>
+    </div>`}
+  </div>`;
+}
+
+function renderFocus(){
+  const open=S.tasks.filter(t=>t.status!=='completed');
+  const foco=open.find(isFocus);
+  $('#focusCard').innerHTML = foco
+    ? `<span class="label">Objetivo único del día</span>
+       <div class="focus-obj">${esc(cleanTitle(foco))}</div>
+       <p class="note" style="margin-top:.5rem">${esc(foco._list||'')}${foco.due?' · vence '+new Date(dueKey(foco)+'T12:00:00').toLocaleDateString('es-EC',{day:'numeric',month:'short'}):''}</p>
+       <div class="focus-actions">
+         <button class="btn-tiny" data-act="focus" data-id="${esc(foco.id)}">Quitar foco</button>
+       </div>`
+    : `<span class="label label-muted">Objetivo único del día</span>
+       <div class="focus-obj focus-empty">Sin foco declarado</div>
+       <p class="note" style="margin-top:.5rem">Pulsa ◎ en cualquier tarea para fijarla como objetivo del día.</p>`;
+
+  const prio=open.filter(isPriority).slice(0,3);
+  $('#priorities').innerHTML = prio.length
+    ? prio.map(t=>taskHTML(t,{overdue:dueKey(t)&&dueKey(t)<TODAY})).join('')
+    : `<p class="empty">Pulsa ★ en hasta tres tareas para fijar tus prioridades.</p>`;
+}
+
+function renderAgenda(){
+  const evs=eventsOn(TODAY);
+  if(!evs.length){ $('#agenda').innerHTML='<p class="empty">Sin eventos hoy. Día libre para trabajo profundo.</p>'; return; }
+  const now=new Date();
+  $('#agenda').innerHTML = evs.map(e=>{
+    const allDay=!e.start?.dateTime;
+    const s=allDay?null:new Date(e.start.dateTime);
+    const en=allDay?null:new Date(e.end.dateTime);
+    const activo = s && en && now>=s && now<=en;
+    const dur = s&&en ? (en-s)/3.6e6 : 0;
+    return `<div class="ev ${activo?'now':''}">
+      <div class="ev-time">${allDay?'TODO EL DÍA':s.toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})}
+        ${allDay?'':`<small>${fmtHM(dur)}</small>`}</div>
+      <div>
+        <div class="ev-title">${esc(e.summary||'(sin título)')}</div>
+        <div class="ev-meta">${esc(e._cal||'')}${e.location?' · '+esc(e.location):''}${e.hangoutLink?' · videollamada':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderBoard(){
+  const b=buckets();
+  const cols=[
+    {t:'Vencidas', items:b.overdue, od:true},
+    {t:'Hoy', items:b.today},
+    {t:'Esta semana', items:b.week},
+    {t:'Después / sin fecha', items:b.later}
+  ];
+  $('#board').innerHTML = cols.map(c=>`
+    <div>
+      <div class="col-head">
+        <span class="label ${c.od&&c.items.length?'':'label-muted'}">${c.t}</span>
+        <span class="col-count">${c.items.length}</span>
+      </div>
+      <div class="stack">
+        ${c.items.length ? c.items.slice(0,25).map(t=>taskHTML(t,{overdue:!!c.od})).join('')
+                         : '<p class="empty">Nada pendiente.</p>'}
+        ${c.items.length>25?`<p class="note">+ ${c.items.length-25} más</p>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function renderChart(){
+  const n=S.range, W=720, H=200, padL=28, padB=26, padT=10;
+  const days=[]; for(let i=n-1;i>=0;i--) days.push(keyOf(addDays(new Date(),-i)));
+  const done=days.map(completedOn);
+  const hrs =days.map(d=>eventHours(eventsOn(d)));
+  const maxD=Math.max(1,...done), maxH=Math.max(1,...hrs);
+  const iw=W-padL-8, ih=H-padB-padT;
+  const bw=iw/days.length;
+
+  const bars=days.map((d,i)=>{
+    const h=(done[i]/maxD)*ih;
+    const x=padL+i*bw+bw*0.18, w=bw*0.64, y=padT+ih-h;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(h,0).toFixed(1)}"
+      rx="2" fill="var(--accent)" opacity="${done[i]?0.9:0.15}"><title>${d}: ${done[i]} cerradas</title></rect>`;
+  }).join('');
+
+  const pts=days.map((d,i)=>{
+    const x=padL+i*bw+bw/2, y=padT+ih-(hrs[i]/maxH)*ih*0.92;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  const labels=days.map((d,i)=>{
+    const step=Math.ceil(days.length/7);
+    if(i%step) return '';
+    const dt=new Date(d+'T12:00:00');
+    return `<text x="${(padL+i*bw+bw/2).toFixed(1)}" y="${H-8}" text-anchor="middle"
+      font-size="10" fill="var(--text-muted)" font-family="var(--font-sans)">${dt.getDate()}/${dt.getMonth()+1}</text>`;
+  }).join('');
+
+  $('#chartWrap').innerHTML=`
+  <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
+       aria-label="Tareas completadas y horas de calendario por día">
+    <line x1="${padL}" y1="${padT+ih}" x2="${W-8}" y2="${padT+ih}" stroke="var(--border)" stroke-width="1"/>
+    <text x="4" y="${padT+8}" font-size="10" fill="var(--text-muted)">${maxD}</text>
+    ${bars}
+    <polyline points="${pts}" fill="none" stroke="var(--border-strong)" stroke-width="1.5"
+      stroke-linejoin="round" stroke-linecap="round"/>
+    ${labels}
+  </svg>`;
+}
+
+function renderProjects(){
+  const map=new Map();
+  S.tasks.filter(t=>t.status!=='completed').forEach(t=>{
+    const k=t._list||'Sin lista';
+    if(!map.has(k)) map.set(k,{open:0,over:0,week:0,h:0});
+    const r=map.get(k); const d=dueKey(t);
+    r.open++;
+    if(d&&d<TODAY) r.over++;
+    if(d&&d>=TODAY&&d<=WEEK_END) r.week++;
+    r.h+=parseDur(`${t.title} ${t.notes||''}`);
+  });
+  const rows=[...map.entries()].sort((a,b)=>b[1].open-a[1].open);
+  const tb=$('#projTable tbody');
+  tb.innerHTML = rows.length ? rows.map(([k,r])=>`
+    <tr><td class="strong">${esc(k)}</td>
+      <td class="num">${r.open}</td>
+      <td class="num" style="${r.over?'color:var(--alert);font-weight:500':''}">${r.over}</td>
+      <td class="num">${r.week}</td>
+      <td class="num">${r.h?fmtHM(r.h):'—'}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="empty">Sin tareas abiertas.</td></tr>';
+}
+
+/* ------------------------- Datos de ejemplo ------------------------- */
+function renderDemo(){
+  S.demo=true; S.profile=null;
+  const d=i=>keyOf(addDays(new Date(),i));
+  const mk=(id,title,list,due,st,notes,comp)=>({id,title,_list:list,_listId:'demo',
+    due:due?due+'T00:00:00.000Z':null,status:st||'needsAction',notes:notes||'',completed:comp||null});
+  S.tasks=[
+    mk('1','[1] Cerrar informe de diagnóstico institucional [3h]','Consultoría',d(0)),
+    mk('2','[P] Revisar matriz de riesgos del decreto [2h]','Consultoría',d(0)),
+    mk('3','[P] Preparar sesión 7 — política pública [90m]','UDLA',d(1)),
+    mk('4','[P] Enviar propuesta económica','Consultoría',d(-2)),
+    mk('5','Consolidar actas del comité','REDEIC-EC',d(-1)),
+    mk('6','Actualizar corpus normativo [45m]','REDEIC-EC',d(3)),
+    mk('7','Calificar ensayos parciales [4h]','UDLA',d(4)),
+    mk('8','Agendar reunión con contraparte técnica','Consultoría',null),
+    mk('9','Revisar estatutos v3','REDEIC-EC',null),
+    mk('10','Cerrar acta de reunión','Consultoría',d(-3),'completed','',new Date(addDays(new Date(),-1)).toISOString()),
+    mk('11','Enviar minuta al equipo','UDLA',d(-3),'completed','',new Date(addDays(new Date(),-1)).toISOString()),
+    mk('12','Validar cifras del anexo','Consultoría',d(-4),'completed','',new Date(addDays(new Date(),-2)).toISOString()),
+    mk('13','Preparar guion de clase','UDLA',d(-5),'completed','',new Date(addDays(new Date(),-3)).toISOString()),
+    mk('14','Responder oficio','REDEIC-EC',d(-6),'completed','',new Date(addDays(new Date(),-4)).toISOString()),
+    mk('15','Cerrar checklist de entrega','Consultoría',d(-6),'completed','',new Date(addDays(new Date(),-4)).toISOString()),
+    mk('16','Ajustar cronograma','Consultoría',d(-7),'completed','',new Date(addDays(new Date(),-6)).toISOString())
+  ];
+  const ev=(h,m,dur,t,cal)=>{
+    const s=new Date(); s.setHours(h,m,0,0);
+    const e=new Date(s.getTime()+dur*60000);
+    return {summary:t,_cal:cal,start:{dateTime:s.toISOString()},end:{dateTime:e.toISOString()},status:'confirmed'};
+  };
+  S.events=[
+    ev(8,30,60,'Comité técnico — seguimiento','Trabajo'),
+    ev(10,30,90,'Sesión con contraparte GIZ','Trabajo'),
+    ev(14,0,120,'Clase — Políticas Públicas','UDLA'),
+    ev(17,0,45,'Revisión de avances','Trabajo')
+  ];
+  for(let i=1;i<=29;i++){
+    const s=addDays(new Date(),-i); s.setHours(9,0,0,0);
+    const e=new Date(s.getTime()+(2+(i%3))*3600000);
+    S.events.push({summary:'Bloque de trabajo',_cal:'Trabajo',
+      start:{dateTime:s.toISOString()},end:{dateTime:e.toISOString()},status:'confirmed'});
+  }
+  renderAll();
+  $('#statusDot').className='dot demo';
+  $('#statusText').textContent='Datos de ejemplo — nada conectado a tu cuenta';
+  setAuthUI(false);
+}
+
+/* ------------------------- Asistente ------------------------- */
+function diagnose(err){
+  const e=String(err||'').toLowerCase();
+  if(e.includes('origin')||e.includes('redirect'))
+    return `El origen ${location.origin} no está autorizado en tu cliente OAuth. Añádelo y espera un minuto.`;
+  if(e.includes('access_denied'))
+    return 'Google denegó el acceso. Añade tu correo como usuario de prueba en la pantalla de consentimiento.';
+  if(e.includes('popup')) return 'El navegador bloqueó la ventana de Google. Permite las ventanas emergentes.';
+  if(e.includes('invalid_client')) return 'El ID de cliente no es válido para este sitio. Revísalo en la consola.';
+  return 'No se pudo autorizar: '+err;
+}
+
+function goStep(n){
+  $$('.step').forEach(s=>s.classList.toggle('hidden', s.dataset.step!==String(n)));
+  $$('#stepDots span').forEach((d,i)=>d.classList.toggle('on', i<n));
+  if(n===2) $('#originHint').textContent=location.origin;
+  if(n===3) setTimeout(()=>$('#clientIdInput').focus(),80);
+}
+
+function openSetup(step){
+  if(!$('#stepDots').children.length)
+    $('#stepDots').innerHTML='<span></span><span></span><span></span>';
+  $('#originHint').textContent=location.origin;
+  $('#clientIdInput').value=localStorage.getItem('jmh_client_id')||'';
+  goStep(step || (localStorage.getItem('jmh_client_id')?3:1));
+  $('#setupModal').classList.add('open');
+}
+function closeSetup(){ $('#setupModal').classList.remove('open'); }
+
+async function copyFrom(sel){
+  const txt=$(sel).textContent.trim();
+  try{ await navigator.clipboard.writeText(txt); toast('Copiado'); }
+  catch(_){
+    const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); ta.remove(); toast('Copiado');
+  }
+}
+
+/* ------------------------- Eventos ------------------------- */
+$('#btnLogin').addEventListener('click',()=>{
+  if(!getClientId()){ openSetup(); return; }
+  login();
+});
+$('#btnLogout').addEventListener('click',logout);
+$('#btnRefresh').addEventListener('click',loadAll);
+$('#btnDemo').addEventListener('click',renderDemo);
+$('#setupClose').addEventListener('click',closeSetup);
+$('#setupDemo').addEventListener('click',()=>{closeSetup();renderDemo();});
+$('#setupModal').addEventListener('click',e=>{
+  const go=e.target.closest('[data-go]'); if(go){ goStep(Number(go.dataset.go)); return; }
+  const cp=e.target.closest('[data-copy]'); if(cp){ copyFrom(cp.dataset.copy); }
+});
+$('#clientIdInput').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#setupSave').click(); });
+$('#setupSave').addEventListener('click',()=>{
+  const v=$('#clientIdInput').value.trim();
+  if(!/^[\w-]+\.apps\.googleusercontent\.com$/.test(v)){
+    toast('El ID debe terminar en .apps.googleusercontent.com'); return;
+  }
+  localStorage.setItem('jmh_client_id',v);
+  $('#persistLine').textContent=`clientId: "${v}",`;
+  $('#persistBox').classList.remove('hidden');
+  if(initTokenClient()){ login(); } else { toast('Recarga la página para conectar'); }
+});
+$('#setupModal').addEventListener('click',e=>{ if(e.target===$('#setupModal')) closeSetup(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSetup(); });
+
+$$('.tab').forEach(b=>b.addEventListener('click',()=>{
+  $$('.tab').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); S.range=Number(b.dataset.range); renderChart();
+}));
+
+document.addEventListener('click',e=>{
+  const chk=e.target.closest('.check');
+  if(chk){
+    const t=S.tasks.find(x=>x.id===chk.closest('.item')?.dataset.id);
+    if(t && t.status!=='completed') completeTask(t,chk);
+    return;
+  }
+  const act=e.target.closest('[data-act]');
+  if(act){
+    const id=act.dataset.id || act.closest('.item')?.dataset.id;
+    const t=S.tasks.find(x=>x.id===id);
+    if(t) toggleMark(t, act.dataset.act==='prio'?'prio':'focus', act);
+  }
+});
+
+/* Reintenta la sesión al volver a la pestaña si el token caducó */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && S.token && Date.now()>S.expiry && S.tokenClient){
+    S.tokenClient.requestAccessToken({prompt:''});
+  }
+});
+
+/* ------------------------- Arranque ------------------------- */
+window.addEventListener('load',()=>{
+  $('#dateLine').textContent=new Date().toLocaleDateString('es-EC',
+    {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  renderDemo();                 // el panel nunca aparece vacío
+  if(initTokenClient()) silentLogin();
+});
+</script>
+</body>
+</html>
