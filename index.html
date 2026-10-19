@@ -62,7 +62,7 @@ profile</code><button class="tiny" data-copy="#scopeHint">Copiar</button></div><
 const CFG=window.JMH_CONFIG||{};
 const SCOPES=['https://www.googleapis.com/auth/calendar.readonly','https://www.googleapis.com/auth/tasks','openid','email','profile'].join(' ');
 const JORNADA_HORAS=Number(CFG.jornadaHoras)||8;
-const S={token:null,expiry:0,demo:false,profile:null,lists:[],tasks:[],events:[],tokenClient:null,view:'day',anchor:null,loaded:{from:null,to:null},busy:false,open:new Set(),silent:false,boardGroup:'due',boardProject:'all',boardDue:'all',boardSearch:''};
+const S={token:null,expiry:0,demo:false,profile:null,lists:[],tasks:[],events:[],tokenClient:null,view:'day',anchor:null,loaded:{from:null,to:null},busy:false,syncing:false,open:new Set(),silent:false,boardGroup:'due',boardProject:'all',boardDue:'all',boardSearch:''};
 const $=q=>document.querySelector(q), $$=q=>[...document.querySelectorAll(q)];
 const pad=n=>String(n).padStart(2,'0');
 const keyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -88,7 +88,14 @@ function initTokenClient(){if(!getClientId()||!window.google?.accounts?.oauth2)r
 function login(){if(!S.tokenClient&&!initTokenClient()){openSetup();return}S.tokenClient.requestAccessToken({prompt:'consent'})}
 function silentLogin(){try{const {t,e}=JSON.parse(sessionStorage.getItem('jmh_tok')||'{}');if(t&&e>Date.now()){S.token=t;S.expiry=e;loadAll();return}}catch(_){}if(S.tokenClient&&localStorage.getItem('jmh_connected')==='1'){S.silent=true;S.tokenClient.requestAccessToken({prompt:''})}}
 function logout(){if(S.token&&window.google?.accounts?.oauth2)google.accounts.oauth2.revoke(S.token,()=>{});S.token=null;S.expiry=0;S.profile=null;S.tasks=[];S.events=[];S.lists=[];S.loaded={from:null,to:null};sessionStorage.removeItem('jmh_tok');localStorage.removeItem('jmh_connected');$('#avatar').classList.add('hidden');renderDemo();toast('Sesión cerrada')}
-async function api(url){if(!S.token)throw new Error('Debes conectar Google');const r=await fetch(url,{headers:{Authorization:'Bearer '+S.token}});if(r.status===401){sessionStorage.removeItem('jmh_tok');throw new Error('Sesión expirada')}if(!r.ok)throw new Error('Google respondió '+r.status);return r.json()}
+async function api(url){
+ if(!S.token)throw new Error('Debes conectar Google');
+ // Google Tasks debe consultarse de nuevo, sin respuestas reutilizadas por el navegador.
+ const r=await fetch(url,{method:'GET',cache:'no-store',headers:{Authorization:'Bearer '+S.token,'Cache-Control':'no-cache'}});
+ if(r.status===401){sessionStorage.removeItem('jmh_tok');S.expiry=0;throw new Error('Sesión expirada: vuelve a conectar Google')}
+ if(!r.ok){let detail='';try{const d=await r.json();detail=d.error?.message||''}catch(_){}throw new Error(`Google respondió ${r.status}${detail?': '+detail:''}`)}
+ return r.json();
+}
 async function apiPaged(url,key='items'){const out=[];let next=null;do{const sep=url.includes('?')?'&':'?';const data=await api(url+(next?sep+'pageToken='+encodeURIComponent(next):''));out.push(...(data[key]||[]));next=data.nextPageToken||null}while(next);return out}
 async function fetchProfile(){try{S.profile=await api('https://www.googleapis.com/oauth2/v3/userinfo')}catch(_){S.profile=null}}
 async function fetchTasks(){const lists=await apiPaged('https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=100');const sets=await Promise.all(lists.map(async l=>{const url=`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(l.id)}/tasks?maxResults=100&showCompleted=true&showHidden=true`;const items=await apiPaged(url);return items.map(t=>({...t,_list:l.title,_listId:l.id}))}));S.lists=lists;S.tasks=sets.flat().filter(t=>!t.deleted)}
@@ -100,7 +107,43 @@ function unmark(t,k){return {title:tidy(t.title.replace(tagRX[k],'')),notes:tidy
 function mark(t,k){const x=unmark(t,k);return {...x,title:`[${k==='prio'?'P':'1'}] ${x.title}`}}
 async function toggleMark(t,k){try{if(marked(t,k)){await patchTask(t,unmark(t,k))}else{if(k==='prio'&&S.tasks.filter(x=>isTop(x)&&x.status!=='completed'&&marked(x,'prio')).length>=3){toast('Ya hay tres prioridades');return}if(k==='focus'){for(const other of S.tasks.filter(x=>x!==t&&marked(x,'focus')))await patchTask(other,unmark(other,'focus'))}await patchTask(t,mark(t,k))}renderAll();if(S.demo)toast('Modo ejemplo: los cambios no se guardan')}catch(e){toast('No se pudo guardar: '+e.message)}}
 async function completeTask(t){if(t.status==='completed')return;try{await patchTask(t,{status:'completed',completed:new Date().toISOString()});renderAll();toast(S.demo?'Completada en el ejemplo':'Tarea completada en Google Tasks')}catch(e){toast('No se pudo completar: '+e.message)}}
-async function loadAll(){setAuthUI(true);$('#statusText').textContent='Sincronizando con Google…';try{const from=startDay(addDays(new Date(),-30)),to=startDay(addDays(new Date(),15));await Promise.all([fetchProfile(),fetchTasks(),fetchEvents(from,to)]);S.loaded={from,to};S.demo=false;renderAll();$('#statusDot').className='dot live';$('#statusText').textContent=`Conectado · ${S.tasks.length} tareas · ${S.events.length} eventos · actualizado ${new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit',hour12:false})}`}catch(e){toast(e.message);$('#statusText').textContent='Error de sincronización: '+e.message;if(/expirada/.test(e.message))setAuthUI(false)}}
+async function loadAll(){
+ if(S.syncing)return;
+ if(!S.token){toast('Conecta tu cuenta de Google para actualizar');setAuthUI(false);return}
+ S.syncing=true;
+ const refresh=$('#btnRefresh');
+ refresh.disabled=true;refresh.textContent='Actualizando…';
+ setAuthUI(true);
+ $('#statusDot').className='dot';
+ $('#statusText').textContent='Consultando tareas y calendario en Google…';
+ try{
+  const from=startDay(addDays(new Date(),-30)),to=startDay(addDays(new Date(),15));
+  // Mantener la última vista si una consulta falla; reemplazar solo con datos confirmados.
+  await Promise.all([fetchProfile(),fetchTasks(),fetchEvents(from,to)]);
+  S.loaded={from,to};S.demo=false;
+  renderAll();
+  $('#statusDot').className='dot live';
+  const now=new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  $('#statusText').textContent=`Sincronizado ${now} · ${S.tasks.length} tareas · ${S.events.length} eventos`;
+  toast('Tareas y calendario actualizados desde Google');
+ }catch(e){
+  $('#statusText').textContent='No se pudo actualizar: '+e.message;
+  toast('Error de actualización: '+e.message);
+  if(/sesión expirada/i.test(e.message)){S.token=null;sessionStorage.removeItem('jmh_tok');setAuthUI(false)}
+ }finally{
+  S.syncing=false;refresh.disabled=false;refresh.textContent='Actualizar';
+ }
+}
+async function refreshAll(){
+ if(S.syncing)return;
+ // Los tokens caducados requieren una autorización nueva antes de consultar las APIs.
+ if(!S.token||Date.now()>=S.expiry){
+  if(!S.tokenClient&&!initTokenClient()){openSetup();return}
+  S.tokenClient.requestAccessToken({prompt:''});
+  return;
+ }
+ await loadAll();
+}
 function setAuthUI(on){$('#btnLogin').classList.toggle('hidden',on);$('#btnLogout').classList.toggle('hidden',!on);$('#btnRefresh').classList.toggle('hidden',!on);$('#btnDemo').classList.toggle('hidden',on)}
 function buckets(){const open=S.tasks.filter(t=>isTop(t)&&t.status!=='completed'),today=todayKey(),end=weekEnd();return {open,overdue:open.filter(t=>dueKey(t)&&dueKey(t)<today),today:open.filter(t=>dueKey(t)===today),week:open.filter(t=>dueKey(t)>today&&dueKey(t)<=end),later:open.filter(t=>!dueKey(t)||dueKey(t)>end)}}
 function eventsOn(k){return S.events.filter(e=>{const s=e.start?.dateTime||e.start?.date,finish=e.end?.dateTime||e.end?.date;if(!s)return false;const begin=e.start?.date?s:keyOf(new Date(s));const end=finish?(e.end?.date?finish:keyOf(new Date(new Date(finish).getTime()-1))):begin;return begin<=k&&k<=(e.end?.date?keyOf(addDays(new Date(finish+'T12:00:00'),-1)):end)})}
@@ -152,7 +195,7 @@ function goStep(n){$$('.step').forEach(x=>x.classList.toggle('hidden',x.dataset.
 function openSetup(){goStep(localStorage.getItem('jmh_client_id')?3:1);$('#clientIdInput').value=localStorage.getItem('jmh_client_id')||'';$('#setupModal').classList.add('open')}
 function closeSetup(){$('#setupModal').classList.remove('open')}
 async function copyFrom(q){const s=$(q)?.textContent||'';try{await navigator.clipboard.writeText(s);toast('Copiado')}catch(_){toast('No se pudo copiar automáticamente')}}
-$('#btnLogin').addEventListener('click',()=>getClientId()?login():openSetup());$('#btnLogout').addEventListener('click',logout);$('#btnRefresh').addEventListener('click',loadAll);$('#btnDemo').addEventListener('click',renderDemo);$('#setupClose').addEventListener('click',closeSetup);$('#setupDemo').addEventListener('click',()=>{closeSetup();renderDemo()});$('#setupModal').addEventListener('click',e=>{if(e.target===$('#setupModal'))closeSetup();const g=e.target.closest('[data-go]');if(g)goStep(Number(g.dataset.go));const c=e.target.closest('[data-copy]');if(c)copyFrom(c.dataset.copy)});$('#setupSave').addEventListener('click',()=>{const id=$('#clientIdInput').value.trim();if(!/^[\w-]+\.apps\.googleusercontent\.com$/.test(id)){toast('ID de cliente no válido');return}localStorage.setItem('jmh_client_id',id);$('#persistLine').textContent=`clientId: "${id}",`;$('#persistBox').classList.remove('hidden');if(initTokenClient())login();else toast('Recarga la página para conectar')});$('#clientIdInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#setupSave').click()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSetup()});$$('#viewTabs .tab').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+$('#btnLogin').addEventListener('click',()=>getClientId()?login():openSetup());$('#btnLogout').addEventListener('click',logout);$('#btnRefresh').addEventListener('click',refreshAll);$('#btnDemo').addEventListener('click',renderDemo);$('#setupClose').addEventListener('click',closeSetup);$('#setupDemo').addEventListener('click',()=>{closeSetup();renderDemo()});$('#setupModal').addEventListener('click',e=>{if(e.target===$('#setupModal'))closeSetup();const g=e.target.closest('[data-go]');if(g)goStep(Number(g.dataset.go));const c=e.target.closest('[data-copy]');if(c)copyFrom(c.dataset.copy)});$('#setupSave').addEventListener('click',()=>{const id=$('#clientIdInput').value.trim();if(!/^[\w-]+\.apps\.googleusercontent\.com$/.test(id)){toast('ID de cliente no válido');return}localStorage.setItem('jmh_client_id',id);$('#persistLine').textContent=`clientId: "${id}",`;$('#persistBox').classList.remove('hidden');if(initTokenClient())login();else toast('Recarga la página para conectar')});$('#clientIdInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#setupSave').click()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSetup()});$$('#viewTabs .tab').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 document.addEventListener('click',e=>{const nav=e.target.closest('[data-nav]');if(nav){navAgenda(Number(nav.dataset.nav));return}const cell=e.target.closest('.mcell[data-day]');if(cell){S.anchor=new Date(cell.dataset.day+'T12:00:00');setView('day');return}const disc=e.target.closest('[data-disc]');if(disc){const row=disc.closest('.item');const key=row?.dataset.list+':'+row?.dataset.id;if(key){S.open.has(key)?S.open.delete(key):S.open.add(key);renderAll()}return}const chk=e.target.closest('.check');if(chk){const sub=chk.closest('[data-sub]'),row=chk.closest('.item');const id=sub?.dataset.sub||row?.dataset.id,list=sub?.dataset.sublist||row?.dataset.list;const t=S.tasks.find(x=>x.id===id&&x._listId===list);if(t)completeTask(t);return}const btn=e.target.closest('[data-act]');if(btn){const row=btn.closest('.item'),id=btn.dataset.id||row?.dataset.id,list=btn.dataset.list||row?.dataset.list,t=S.tasks.find(x=>x.id===id&&x._listId===list);if(t)toggleMark(t,btn.dataset.act)}});
 $('#boardGroup').addEventListener('change',e=>{S.boardGroup=e.target.value;renderBoard()});
 $('#boardProject').addEventListener('change',e=>{const names=[...new Set(S.tasks.filter(t=>isTop(t)&&t.status!=='completed').map(t=>t._list||'Sin lista'))].sort((a,b)=>a.localeCompare(b,'es'));S.boardProject=e.target.value==='all'?'all':(names[Number(e.target.value)]||'all');renderBoard()});
