@@ -36,7 +36,7 @@
 </style>
 </head>
 <body>
-<nav><div class="container nav-inner"><div class="brand">JMH · <span>Advisory</span></div><div class="nav-actions"><img id="avatar" class="avatar hidden" alt="Foto de perfil" referrerpolicy="no-referrer"><button id="btnRefresh" class="btn ghost hidden">Actualizar</button><button id="btnDemo" class="btn ghost">Ver ejemplo</button><button id="btnLogin" class="btn primary">Entrar con Google</button><button id="btnLogout" class="btn ghost hidden">Salir</button></div></div></nav>
+<nav><div class="container nav-inner"><div class="brand">JMH · <span>Advisory</span></div><div class="nav-actions"><img id="avatar" class="avatar hidden" alt="Foto de perfil" referrerpolicy="no-referrer"><button id="btnDiag" class="btn ghost hidden">Diagnóstico de fechas</button><button id="btnRefresh" class="btn ghost hidden">Actualizar</button><button id="btnDemo" class="btn ghost">Ver ejemplo</button><button id="btnLogin" class="btn primary">Entrar con Google</button><button id="btnLogout" class="btn ghost hidden">Salir</button></div></div></nav>
 <header class="hero"><div class="container"><span class="label">Panel ejecutivo</span><h1 id="greeting">Agenda &amp; <em>ejecución</em></h1><p id="dateLine"></p><div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Sin conectar — los datos se consultan directamente desde tu navegador</span></div></div></header>
 <main>
 <section class="section" aria-labelledby="t-kpi"><div class="container"><div class="section-head"><span class="label muted">Indicadores</span><h2 id="t-kpi" class="section-title">Cinco <em>señales</em></h2></div><div class="metrics" id="kpis"></div></div></section>
@@ -52,7 +52,7 @@
 </div>
 <div class="board-summary"><span id="boardCount" class="label muted" aria-live="polite"></span><span id="boardHours" class="note"></span></div>
 <div id="board" class="board"></div>
-<p class="note board-help">Las horas se leen de <code>[2h]</code> o <code>[90m]</code>. La fecha programada procede de Google Tasks; la fecha límite se lee del título o de las notas con <code>[vence:2026-10-23]</code>, y también se aceptan <code>vence: 23/10/2026</code> o <code>[vence:2026-10-5]</code>. Usa ▣ para editarla en el panel. Las fechas límite nativas de Google Tasks no están disponibles en su API pública.</p>
+<p class="note board-help">Las horas se leen de <code>[2h]</code> o <code>[90m]</code>. La fecha programada procede de Google Tasks; la fecha límite se lee del título o de las notas con <code>[vence:2026-10-23]</code>, y también se aceptan <code>vence: 23/10/2026</code> o <code>[vence:2026-10-5]</code>. Usa ▣ para editarla en el panel. Si Google Tasks envía su fecha límite nativa, el panel la muestra automáticamente; usa «Diagnóstico de fechas» para ver qué fechas entrega Google en cada lista.</p>
 </div></section>
 </main>
 <footer><div class="container"><div class="footer-brand">JMH · Advisory</div><div class="footer-copy">JAIRON MERCHÁN HAZ</div><p class="note">Este panel se ejecuta en tu navegador y consulta Calendar y Tasks directamente mediante las APIs de Google. No utiliza un servidor propio como intermediario.</p></div></footer>
@@ -70,6 +70,16 @@ profile</code><button class="tiny" data-copy="#scopeHint">Copiar</button></div><
   <p class="note">La fecha límite se guarda en las notas de Google Tasks como [vence:AAAA-MM-DD]; es independiente de la fecha programada. Si la tarea tenía la etiqueta en el título, se traslada a las notas.</p>
   <div class="field"><label for="deadlineInput">Fecha límite</label><input id="deadlineInput" type="date"></div>
   <div class="modal-actions"><button id="deadlineSave" class="btn primary" type="button">Guardar en Google Tasks</button><button id="deadlineRemove" class="btn ghost" type="button">Quitar fecha límite</button><button id="deadlineCancel" class="btn ghost" type="button">Cancelar</button></div>
+ </div>
+</div>
+<div class="overlay" id="diagModal" role="dialog" aria-modal="true" aria-labelledby="diagTitle">
+ <div class="modal" style="width:min(760px,100%)">
+  <button id="diagClose" class="modal-close" aria-label="Cerrar">✕</button>
+  <span class="label">Diagnóstico</span>
+  <h3 id="diagTitle">Fechas recibidas de Google Tasks</h3>
+  <p class="note">Muestra exactamente qué fechas envía la API de Google por cada lista. Si una fecha que ves en Google Tasks no aparece aquí, Google no la entrega a aplicaciones externas.</p>
+  <div id="diagBody"></div>
+  <div class="modal-actions"><button id="diagCopy" class="btn primary" type="button">Copiar diagnóstico</button><button id="diagDone" class="btn ghost" type="button">Cerrar</button></div>
  </div>
 </div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -101,7 +111,15 @@ const DEADLINE_RX=/\[?\s*vence\s*[:=]?\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[\/.-]\d{
 const DEADLINE_RX_G=new RegExp(DEADLINE_RX.source,'gi');
 function validDateKey(k){if(!/^\d{4}-\d{2}-\d{2}$/.test(k||''))return false;const d=new Date(k+'T12:00:00');return !isNaN(d.getTime())&&keyOf(d)===k;}
 function normDate(s){let y,m,d;if(/^\d{4}/.test(s))[y,m,d]=s.split('-');else[d,m,y]=s.split(/[\/.-]/);return `${y}-${pad(m)}-${pad(d)}`}
-function deadlineKey(t){const m=DEADLINE_RX.exec(`${t.notes||''} ${t.title||''}`);if(!m)return null;const k=normDate(m[1]);return validDateKey(k)?k:null}
+function tagDeadlineKey(t){const m=DEADLINE_RX.exec(`${t.notes||''} ${t.title||''}`);if(!m)return null;const k=normDate(m[1]);return validDateKey(k)?k:null}
+// Fechas nativas: cualquier campo de fecha que Google envíe además de due/updated/completed (p. ej. "deadline").
+const KNOWN_DATE_FIELDS=new Set(['due','updated','completed']);
+const ISO_RX=/^\d{4}-\d{2}-\d{2}/;
+function isoToKey(v){if(/T00:00:00(\.0+)?Z$/.test(v)||!v.includes('T'))return v.slice(0,10);const d=new Date(v);return isNaN(d)?v.slice(0,10):keyOf(d)}
+function nativeDateFields(t){const out=[];for(const [k,v] of Object.entries(t||{})){if(k.startsWith('_')||KNOWN_DATE_FIELDS.has(k))continue;if(typeof v==='string'&&ISO_RX.test(v))out.push([k,isoToKey(v)]);else if(v&&typeof v==='object'&&!Array.isArray(v)){for(const [k2,v2] of Object.entries(v))if(typeof v2==='string'&&ISO_RX.test(v2))out.push([k+'.'+k2,isoToKey(v2)])}}return out}
+function nativeDeadlineKey(t){const pick=nativeDateFields(t).find(([k])=>/deadline|due|limit|venc|date/i.test(k));return pick&&validDateKey(pick[1])?pick[1]:null}
+// Prevalece la fecha límite que Google Tasks envía; si no existe, se usa la etiqueta [vence:…].
+function deadlineKey(t){return nativeDeadlineKey(t)||tagDeadlineKey(t)}
 
 const cleanTitle=t=>String(t.title||'(sin título)').replace(/\[(p|1)\]/gi,'').replace(/\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]/gi,'').replace(DEADLINE_RX_G,'').replace(/#foco|[⭐★]/gi,'').replace(/\s{2,}/g,' ').trim()||'(sin título)';
 // Google Tasks API expone "due" (fecha programada), pero no sus deadlines nativos.
@@ -109,7 +127,7 @@ const dueKey=t=>typeof t.due==='string' && /^\d{4}-\d{2}-\d{2}/.test(t.due)?t.du
 // Para alertas y vencimientos prevalece fecha límite; para carga de agenda se usa la programada.
 const effectiveKey=t=>deadlineKey(t)||dueKey(t);
 const shortDate=k=>k?new Date(k+'T12:00:00').toLocaleDateString('es-EC',{day:'numeric',month:'short',year:'numeric'}):'Sin fecha';
-function dateTags(t){const d=dueKey(t),limit=deadlineKey(t);return [d?`<span title="Fecha programada en Google Tasks">Programada: ${esc(shortDate(d))}</span>`:'',limit?`<span class="badge ${limit<todayKey()?'danger':''}" title="Fecha límite declarada en título o notas">Límite: ${esc(shortDate(limit))}</span>`:'',!d&&!limit?'<span>Sin fecha</span>':''].filter(Boolean).join(' · ')}
+function dateTags(t){const d=dueKey(t),limit=deadlineKey(t);return [d?`<span title="Fecha programada en Google Tasks">Programada: ${esc(shortDate(d))}</span>`:'',limit?`<span class="badge ${limit<todayKey()?'danger':''}" title="${nativeDeadlineKey(t)?'Fecha límite de Google Tasks':'Fecha límite declarada en título o notas'}">Límite: ${esc(shortDate(limit))}</span>`:'',!d&&!limit?'<span>Sin fecha</span>':''].filter(Boolean).join(' · ')}
 const isTop=t=>!t.parent;
 const subtasks=t=>S.tasks.filter(x=>x.parent===t.id&&x._listId===t._listId).sort((a,b)=>String(a.position||'').localeCompare(String(b.position||'')));
 const cleanNotes=t=>String(t.notes||'').replace(DEADLINE_RX_G,'').replace(/\[p\]|\[1\]|#foco|[⭐★]|\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]/gi,'').trim();
@@ -136,8 +154,10 @@ async function fetchTasks(){
  const lists=await apiPaged('https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=100');
  const sets=await Promise.all(lists.map(async l=>{
   // showAssigned=true incluye tareas asignadas desde Google Docs o espacios de Chat.
-  const url=`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(l.id)}/tasks?maxResults=100&showCompleted=true&showHidden=true&showAssigned=true`;
-  const items=await apiPaged(url);
+  const base=`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(l.id)}/tasks?maxResults=100&showCompleted=true&showHidden=true`;
+  let items;
+  try{items=await apiPaged(base+'&showAssigned=true')}
+  catch(e){if(/expirada/i.test(e.message))throw e;items=await apiPaged(base)}
   return items.map(t=>({...t,_list:l.title,_listId:l.id}));
  }));
  // Solo sustituimos el conjunto al finalizar TODAS las consultas correctamente.
@@ -197,7 +217,7 @@ async function refreshAll(){
  }
  await loadAll();
 }
-function setAuthUI(on){$('#btnLogin').classList.toggle('hidden',on);$('#btnLogout').classList.toggle('hidden',!on);$('#btnRefresh').classList.toggle('hidden',!on);$('#btnDemo').classList.toggle('hidden',on)}
+function setAuthUI(on){$('#btnDiag').classList.toggle('hidden',!on);$('#btnLogin').classList.toggle('hidden',on);$('#btnLogout').classList.toggle('hidden',!on);$('#btnRefresh').classList.toggle('hidden',!on);$('#btnDemo').classList.toggle('hidden',on)}
 function buckets(){const open=S.tasks.filter(t=>isTop(t)&&t.status!=='completed'),today=todayKey(),end=weekEnd();return {open,overdue:open.filter(t=>effectiveKey(t)&&effectiveKey(t)<today),today:open.filter(t=>effectiveKey(t)===today),week:open.filter(t=>effectiveKey(t)>today&&effectiveKey(t)<=end),later:open.filter(t=>!effectiveKey(t)||effectiveKey(t)>end)}}
 function eventsOn(k){return S.events.filter(e=>{const s=e.start?.dateTime||e.start?.date,finish=e.end?.dateTime||e.end?.date;if(!s)return false;const begin=e.start?.date?s:keyOf(new Date(s));const end=finish?(e.end?.date?finish:keyOf(new Date(new Date(finish).getTime()-1))):begin;return begin<=k&&k<=(e.end?.date?keyOf(addDays(new Date(finish+'T12:00:00'),-1)):end)})}
 function eventHours(list,k){return list.reduce((a,e)=>{if(!e.start?.dateTime||!e.end?.dateTime)return a;const s=new Date(e.start.dateTime).getTime(),f=new Date(e.end.dateTime).getTime();if(k){const day=new Date(k+'T00:00:00').getTime(),next=new Date(addDays(new Date(k+'T00:00:00'),1)).getTime();return a+Math.max(0,Math.min(f,next)-Math.max(s,day))/3600000}return a+Math.max(0,f-s)/3600000},0)}
@@ -243,15 +263,37 @@ function renderBoard(){
    return `<div class="board-column"><div class="col-head"><span class="label ${c.id==='overdue'?'':'muted'}">${esc(c.name)}</span><span class="count">${ordered.length} · ${fmtHM(hours)}</span></div><div class="stack">${ordered.map(t=>taskHTML(t,boardDueGroup(t)==='overdue')).join('')}</div></div>`;
  }).join(''):'<p class="empty">No hay tareas que coincidan con los filtros seleccionados.</p>';
 }
-function renderDemo(){S.demo=true;S.token=null;S.profile=null;S.anchor=startDay(new Date());S.view='day';$$('#viewTabs .tab').forEach(x=>x.classList.toggle('active',x.dataset.view==='day'));const date=i=>keyOf(addDays(new Date(),i));const mk=(id,title,list,n,status='needsAction',notes='',parent=null)=>({id,title,_list:list,_listId:list,due:n===null?null:date(n)+'T00:00:00.000Z',status,notes,parent,completed:status==='completed'?new Date().toISOString():null});S.tasks=[mk('1','[1] Cerrar informe de diagnóstico [3h]','Consultoría',0,'needsAction','Revisar hallazgos y anexo estadístico.\nhttps://jmerchanhaz.com'),mk('1a','Redactar hallazgos','Consultoría',0,'completed','','1'),mk('1b','Armar anexo estadístico','Consultoría',0,'needsAction',`[vence:${date(1)}]`,'1'),mk('2','[P] Revisar matriz de riesgos [2h]','Consultoría',0),mk('3','[P] Preparar sesión 7 [90m]','UDLA',1),mk('4','[P] Enviar propuesta económica','Consultoría',-2),mk('5','Consolidar actas del comité','REDEIC-EC',-1),mk('6','Actualizar corpus normativo [45m]','REDEIC-EC',3),mk('7','Calificar ensayos [4h] vence: 30/10/2026','UDLA',4),mk('8','Agendar reunión','Consultoría',null),mk('9','Revisar estatutos','REDEIC-EC',null,'needsAction','[vence:2026-10-23]'),mk('10','Cerrar acta','Consultoría',-3,'completed')];const ev=(h,m,dur,title,list,offset=0)=>{const start=addDays(new Date(),offset);start.setHours(h,m,0,0);const end=new Date(start.getTime()+dur*60000);return {summary:title,_cal:list,start:{dateTime:start.toISOString()},end:{dateTime:end.toISOString()}}};S.events=[ev(8,30,60,'Comité técnico','Trabajo'),ev(10,30,90,'Sesión con contraparte','Trabajo'),ev(14,0,120,'Clase de Políticas Públicas','UDLA'),ev(17,0,45,'Revisión de avances','Trabajo')];for(let i=1;i<=30;i++)S.events.push(ev(9,0,120,'Bloque de trabajo','Trabajo',-i));setAuthUI(false);renderAll();$('#statusDot').className='dot demo';$('#statusText').textContent='Datos de ejemplo — nada conectado a tu cuenta'}
+function renderDemo(){S.demo=true;S.token=null;S.profile=null;S.anchor=startDay(new Date());S.view='day';$$('#viewTabs .tab').forEach(x=>x.classList.toggle('active',x.dataset.view==='day'));const date=i=>keyOf(addDays(new Date(),i));const mk=(id,title,list,n,status='needsAction',notes='',parent=null)=>({id,title,_list:list,_listId:list,due:n===null?null:date(n)+'T00:00:00.000Z',status,notes,parent,completed:status==='completed'?new Date().toISOString():null});S.tasks=[mk('1','[1] Cerrar informe de diagnóstico [3h]','Consultoría',0,'needsAction','Revisar hallazgos y anexo estadístico.\nhttps://jmerchanhaz.com'),mk('1a','Redactar hallazgos','Consultoría',0,'completed','','1'),mk('1b','Armar anexo estadístico','Consultoría',0,'needsAction',`[vence:${date(1)}]`,'1'),mk('2','[P] Revisar matriz de riesgos [2h]','Consultoría',0),mk('3','[P] Preparar sesión 7 [90m]','UDLA',1),mk('4','[P] Enviar propuesta económica','Consultoría',-2),mk('5','Consolidar actas del comité','REDEIC-EC',-1),mk('6','Actualizar corpus normativo [45m]','REDEIC-EC',3),mk('7','Calificar ensayos [4h] vence: 30/10/2026','UDLA',4),Object.assign(mk('8','Agendar reunión','Consultoría',null),{deadline:date(2)+'T00:00:00.000Z'}),mk('9','Revisar estatutos','REDEIC-EC',null,'needsAction','[vence:2026-10-23]'),mk('10','Cerrar acta','Consultoría',-3,'completed')];const ev=(h,m,dur,title,list,offset=0)=>{const start=addDays(new Date(),offset);start.setHours(h,m,0,0);const end=new Date(start.getTime()+dur*60000);return {summary:title,_cal:list,start:{dateTime:start.toISOString()},end:{dateTime:end.toISOString()}}};S.events=[ev(8,30,60,'Comité técnico','Trabajo'),ev(10,30,90,'Sesión con contraparte','Trabajo'),ev(14,0,120,'Clase de Políticas Públicas','UDLA'),ev(17,0,45,'Revisión de avances','Trabajo')];for(let i=1;i<=30;i++)S.events.push(ev(9,0,120,'Bloque de trabajo','Trabajo',-i));setAuthUI(false);renderAll();$('#statusDot').className='dot demo';$('#statusText').textContent='Datos de ejemplo — nada conectado a tu cuenta'}
 function goStep(n){$$('.step').forEach(x=>x.classList.toggle('hidden',x.dataset.step!==String(n)));$$('#stepDots span').forEach((x,i)=>x.classList.toggle('on',i<n));$('#originHint').textContent=location.origin}
 function openSetup(){goStep(localStorage.getItem('jmh_client_id')?3:1);$('#clientIdInput').value=localStorage.getItem('jmh_client_id')||'';$('#setupModal').classList.add('open')}
 function closeSetup(){$('#setupModal').classList.remove('open')}
 async function copyFrom(q){const s=$(q)?.textContent||'';try{await navigator.clipboard.writeText(s);toast('Copiado')}catch(_){toast('No se pudo copiar automáticamente')}}
-$('#btnLogin').addEventListener('click',()=>getClientId()?login():openSetup());$('#btnLogout').addEventListener('click',logout);$('#btnRefresh').addEventListener('click',refreshAll);$('#btnDemo').addEventListener('click',renderDemo);$('#setupClose').addEventListener('click',closeSetup);$('#setupDemo').addEventListener('click',()=>{closeSetup();renderDemo()});$('#setupModal').addEventListener('click',e=>{if(e.target===$('#setupModal'))closeSetup();const g=e.target.closest('[data-go]');if(g)goStep(Number(g.dataset.go));const c=e.target.closest('[data-copy]');if(c)copyFrom(c.dataset.copy)});$('#setupSave').addEventListener('click',()=>{const id=$('#clientIdInput').value.trim();if(!/^[\w-]+\.apps\.googleusercontent\.com$/.test(id)){toast('ID de cliente no válido');return}localStorage.setItem('jmh_client_id',id);$('#persistLine').textContent=`clientId: "${id}",`;$('#persistBox').classList.remove('hidden');S.tokenClient=null;sessionStorage.removeItem('jmh_tok');S.token=null;S.expiry=0;if(initTokenClient())login();else toast('Recarga la página para conectar')});$('#clientIdInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#setupSave').click()});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSetup();closeDeadlineEditor()}});$$('#viewTabs .tab').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+$('#btnLogin').addEventListener('click',()=>getClientId()?login():openSetup());$('#btnLogout').addEventListener('click',logout);$('#btnRefresh').addEventListener('click',refreshAll);$('#btnDemo').addEventListener('click',renderDemo);$('#setupClose').addEventListener('click',closeSetup);$('#setupDemo').addEventListener('click',()=>{closeSetup();renderDemo()});$('#setupModal').addEventListener('click',e=>{if(e.target===$('#setupModal'))closeSetup();const g=e.target.closest('[data-go]');if(g)goStep(Number(g.dataset.go));const c=e.target.closest('[data-copy]');if(c)copyFrom(c.dataset.copy)});$('#setupSave').addEventListener('click',()=>{const id=$('#clientIdInput').value.trim();if(!/^[\w-]+\.apps\.googleusercontent\.com$/.test(id)){toast('ID de cliente no válido');return}localStorage.setItem('jmh_client_id',id);$('#persistLine').textContent=`clientId: "${id}",`;$('#persistBox').classList.remove('hidden');S.tokenClient=null;sessionStorage.removeItem('jmh_tok');S.token=null;S.expiry=0;if(initTokenClient())login();else toast('Recarga la página para conectar')});$('#clientIdInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('#setupSave').click()});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSetup();closeDeadlineEditor();closeDiag()}});$$('#viewTabs .tab').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 document.addEventListener('click',e=>{const nav=e.target.closest('[data-nav]');if(nav){navAgenda(Number(nav.dataset.nav));return}const cell=e.target.closest('.mcell[data-day]');if(cell){S.anchor=new Date(cell.dataset.day+'T12:00:00');setView('day');return}const disc=e.target.closest('[data-disc]');if(disc){const row=disc.closest('.item');const key=row?.dataset.list+':'+row?.dataset.id;if(key){S.open.has(key)?S.open.delete(key):S.open.add(key);renderAll()}return}const chk=e.target.closest('.check');if(chk){const sub=chk.closest('[data-sub]'),row=chk.closest('.item');const id=sub?.dataset.sub||row?.dataset.id,list=sub?.dataset.sublist||row?.dataset.list;const t=S.tasks.find(x=>x.id===id&&x._listId===list);if(t)completeTask(t);return}const btn=e.target.closest('[data-act]');if(btn){const row=btn.closest('.item'),id=btn.dataset.id||row?.dataset.id,list=btn.dataset.list||row?.dataset.list,t=S.tasks.find(x=>x.id===id&&x._listId===list);if(t){if(btn.dataset.act==='deadline')openDeadlineEditor(t);else toggleMark(t,btn.dataset.act)}}});
+let diagText='';
+function openDiag(){
+ const open=S.tasks.filter(t=>t.status!=='completed');
+ const lists=[...new Set(open.map(t=>t._list||'Sin lista'))].sort((a,b)=>a.localeCompare(b,'es'));
+ const rows=lists.map(name=>{const ts=open.filter(t=>(t._list||'Sin lista')===name);return {name,total:ts.length,due:ts.filter(dueKey).length,nat:ts.filter(nativeDeadlineKey).length,tag:ts.filter(tagDeadlineKey).length,none:ts.filter(t=>!dueKey(t)&&!deadlineKey(t)).length}});
+ const fields=[...new Set(S.tasks.flatMap(t=>Object.keys(t).filter(k=>!k.startsWith('_'))))].sort();
+ const extra=[...new Set(S.tasks.flatMap(t=>nativeDateFields(t).map(([k])=>k)))];
+ const sample=open.find(t=>!dueKey(t)&&!deadlineKey(t))||open[0];
+ const raw=sample?JSON.stringify(Object.fromEntries(Object.entries(sample).filter(([k])=>!k.startsWith('_')||k==='_list')),null,2):'(sin tareas abiertas)';
+ $('#diagBody').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Lista</th><th class="num">Abiertas</th><th class="num">Fecha (due)</th><th class="num">Límite Google</th><th class="num">Límite etiqueta</th><th class="num">Sin fecha</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${r.total}</td><td class="num">${r.due}</td><td class="num">${r.nat}</td><td class="num">${r.tag}</td><td class="num">${r.none}</td></tr>`).join('')}</tbody></table></div>
+ <p class="note" style="margin-top:14px"><strong>Campos que envía Google:</strong> ${esc(fields.join(', '))}</p>
+ <p class="note"><strong>Campos de fecha adicionales detectados:</strong> ${extra.length?esc(extra.join(', ')):'ninguno — Google solo envía la fecha programada (due)'}</p>
+ <span class="label muted">Ejemplo de tarea sin fecha detectada</span><div class="copyrow"><code>${esc(raw)}</code></div>`;
+ diagText=`Listas:\n${rows.map(r=>`${r.name}: abiertas ${r.total}, due ${r.due}, límite Google ${r.nat}, etiqueta ${r.tag}, sin fecha ${r.none}`).join('\n')}\nCampos: ${fields.join(', ')}\nFechas extra: ${extra.join(', ')||'ninguna'}\nEjemplo:\n${raw}`;
+ $('#diagModal').classList.add('open');
+}
+function closeDiag(){$('#diagModal').classList.remove('open')}
+$('#btnDiag').addEventListener('click',openDiag);
+$('#diagClose').addEventListener('click',closeDiag);
+$('#diagDone').addEventListener('click',closeDiag);
+$('#diagModal').addEventListener('click',e=>{if(e.target===$('#diagModal'))closeDiag()});
+$('#diagCopy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(diagText);toast('Diagnóstico copiado')}catch(_){toast('No se pudo copiar automáticamente')}});
 let deadlineEditing=null;
-function openDeadlineEditor(t){deadlineEditing=t;$('#deadlineTaskName').textContent=cleanTitle(t);$('#deadlineInput').value=deadlineKey(t)||'';$('#deadlineModal').classList.add('open');}
+function openDeadlineEditor(t){deadlineEditing=t;const nat=nativeDeadlineKey(t);$('#deadlineTaskName').textContent=cleanTitle(t)+(nat?` — ya tiene fecha límite en Google Tasks (${shortDate(nat)}); para cambiarla, edítala en Google Tasks.`:'');$('#deadlineInput').value=deadlineKey(t)||'';$('#deadlineInput').disabled=!!nat;$('#deadlineSave').disabled=!!nat;$('#deadlineRemove').disabled=!!nat;$('#deadlineModal').classList.add('open');}
 function closeDeadlineEditor(){deadlineEditing=null;$('#deadlineModal').classList.remove('open');}
 async function saveDeadline(remove=false){
  const t=deadlineEditing;if(!t)return;
@@ -266,7 +308,7 @@ async function saveDeadline(remove=false){
   if(DEADLINE_RX.test(rawTitle))fields.title=tidy(rawTitle.replace(DEADLINE_RX_G,''))||'(sin título)';
   await patchTask(t,fields);
   closeDeadlineEditor();renderAll();toast(S.demo?'Fecha cambiada solo en ejemplo':(remove?'Fecha límite eliminada en Google Tasks':'Fecha límite guardada en Google Tasks'));
- }catch(e){toast('No se pudo guardar: '+e.message)}finally{buttons.forEach(b=>b.disabled=false)}
+ }catch(e){toast('No se pudo guardar: '+e.message)}finally{buttons.forEach(b=>b.disabled=false);$('#deadlineInput').disabled=false}
 }
 $('#deadlineClose').addEventListener('click',closeDeadlineEditor);
 $('#deadlineCancel').addEventListener('click',closeDeadlineEditor);
