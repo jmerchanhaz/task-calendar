@@ -31,6 +31,8 @@
 #deadlineModal .field label{display:block;margin-bottom:6px;font:700 11px var(--mono);color:var(--muted)}
 #deadlineModal .field input{width:100%;border:1px solid var(--border);border-radius:6px;background:white;padding:10px}
 .item .meta .badge.danger{color:var(--danger);background:#F7ECEA}
+/* Fechas en subtareas */
+.details .subtask .sub-date{display:block;font-size:11px;color:var(--muted);text-decoration:none}
 </style>
 </head>
 <body>
@@ -50,7 +52,7 @@
 </div>
 <div class="board-summary"><span id="boardCount" class="label muted" aria-live="polite"></span><span id="boardHours" class="note"></span></div>
 <div id="board" class="board"></div>
-<p class="note board-help">Las horas se leen de <code>[2h]</code> o <code>[90m]</code>. La fecha programada procede de Google Tasks; la fecha límite se registra en las notas mediante <code>[vence:2026-10-23]</code>. Usa ▣ para editarla en el panel. Las fechas de entrega nativas de Google Tasks no están disponibles en su API pública.</p>
+<p class="note board-help">Las horas se leen de <code>[2h]</code> o <code>[90m]</code>. La fecha programada procede de Google Tasks; la fecha límite se lee del título o de las notas con <code>[vence:2026-10-23]</code>, y también se aceptan <code>vence: 23/10/2026</code> o <code>[vence:2026-10-5]</code>. Usa ▣ para editarla en el panel. Las fechas límite nativas de Google Tasks no están disponibles en su API pública.</p>
 </div></section>
 </main>
 <footer><div class="container"><div class="footer-brand">JMH · Advisory</div><div class="footer-copy">JAIRON MERCHÁN HAZ</div><p class="note">Este panel se ejecuta en tu navegador y consulta Calendar y Tasks directamente mediante las APIs de Google. No utiliza un servidor propio como intermediario.</p></div></footer>
@@ -65,7 +67,7 @@ profile</code><button class="tiny" data-copy="#scopeHint">Copiar</button></div><
   <span class="label">Planificación</span>
   <h3 id="deadlineTitle">Fecha límite</h3>
   <p id="deadlineTaskName" class="note"></p>
-  <p class="note">La fecha límite se guarda en las notas de Google Tasks como [vence:AAAA-MM-DD]; es independiente de la fecha programada.</p>
+  <p class="note">La fecha límite se guarda en las notas de Google Tasks como [vence:AAAA-MM-DD]; es independiente de la fecha programada. Si la tarea tenía la etiqueta en el título, se traslada a las notas.</p>
   <div class="field"><label for="deadlineInput">Fecha límite</label><input id="deadlineInput" type="date"></div>
   <div class="modal-actions"><button id="deadlineSave" class="btn primary" type="button">Guardar en Google Tasks</button><button id="deadlineRemove" class="btn ghost" type="button">Quitar fecha límite</button><button id="deadlineCancel" class="btn ghost" type="button">Cancelar</button></div>
  </div>
@@ -91,22 +93,30 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 function fmtHM(h){if(!h)return '0 h';const m=Math.round(h*60),H=Math.floor(m/60),M=m%60;return M?`${H} h ${M} min`:`${H} h`}
 function parseDur(s){const m=/\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]/i.exec(s||'');return m?Number(m[1].replace(',','.'))*(m[2].toLowerCase().startsWith('m')?1/60:1):0}
 const marked=(t,k)=>k==='prio'?/\[p\]|⭐|★/i.test(`${t.title||''} ${t.notes||''}`):/\[1\]|#foco/i.test(`${t.title||''} ${t.notes||''}`);
-const cleanTitle=t=>String(t.title||'(sin título)').replace(/\[(p|1)\]/gi,'').replace(/\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]/gi,'').replace(/#foco|[⭐★]/gi,'').replace(/\s{2,}/g,' ').trim();
+
+// ── Fechas límite ───────────────────────────────────────────────
+// Acepta, en título o notas: [vence:2026-10-23] · [vence: 2026-10-5] · vence:23/10/2026 · vence 23-10-2026 · vence=23.10.2026
+const DEADLINE_RX=/\[?\s*vence\s*[:=]?\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4})\s*\]?/i;
+// Versión global solo para .replace(); no usar con .test() ni .exec().
+const DEADLINE_RX_G=new RegExp(DEADLINE_RX.source,'gi');
+function validDateKey(k){if(!/^\d{4}-\d{2}-\d{2}$/.test(k||''))return false;const d=new Date(k+'T12:00:00');return !isNaN(d.getTime())&&keyOf(d)===k;}
+function normDate(s){let y,m,d;if(/^\d{4}/.test(s))[y,m,d]=s.split('-');else[d,m,y]=s.split(/[\/.-]/);return `${y}-${pad(m)}-${pad(d)}`}
+function deadlineKey(t){const m=DEADLINE_RX.exec(`${t.notes||''} ${t.title||''}`);if(!m)return null;const k=normDate(m[1]);return validDateKey(k)?k:null}
+
+const cleanTitle=t=>String(t.title||'(sin título)').replace(/\[(p|1)\]/gi,'').replace(/\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]/gi,'').replace(DEADLINE_RX_G,'').replace(/#foco|[⭐★]/gi,'').replace(/\s{2,}/g,' ').trim()||'(sin título)';
 // Google Tasks API expone "due" (fecha programada), pero no sus deadlines nativos.
 const dueKey=t=>typeof t.due==='string' && /^\d{4}-\d{2}-\d{2}/.test(t.due)?t.due.slice(0,10):null;
-const DEADLINE_RX=/\[vence\s*:\s*(\d{4}-\d{2}-\d{2})\]/i;
-function validDateKey(k){if(!/^\d{4}-\d{2}-\d{2}$/.test(k||''))return false;const d=new Date(k+'T12:00:00');return !isNaN(d.getTime())&&keyOf(d)===k;}
-function deadlineKey(t){const m=DEADLINE_RX.exec(String(t.notes||''));return m&&validDateKey(m[1])?m[1]:null;}
 // Para alertas y vencimientos prevalece fecha límite; para carga de agenda se usa la programada.
 const effectiveKey=t=>deadlineKey(t)||dueKey(t);
 const shortDate=k=>k?new Date(k+'T12:00:00').toLocaleDateString('es-EC',{day:'numeric',month:'short',year:'numeric'}):'Sin fecha';
-function dateTags(t){const d=dueKey(t),limit=deadlineKey(t);return [d?`<span title="Fecha programada en Google Tasks">Programada: ${esc(shortDate(d))}</span>`:'',limit?`<span class="badge ${limit<todayKey()?'danger':''}" title="Fecha límite declarada en notas">Límite: ${esc(shortDate(limit))}</span>`:'',!d&&!limit?'<span>Sin fecha</span>':''].filter(Boolean).join(' · ')}
+function dateTags(t){const d=dueKey(t),limit=deadlineKey(t);return [d?`<span title="Fecha programada en Google Tasks">Programada: ${esc(shortDate(d))}</span>`:'',limit?`<span class="badge ${limit<todayKey()?'danger':''}" title="Fecha límite declarada en título o notas">Límite: ${esc(shortDate(limit))}</span>`:'',!d&&!limit?'<span>Sin fecha</span>':''].filter(Boolean).join(' · ')}
 const isTop=t=>!t.parent;
 const subtasks=t=>S.tasks.filter(x=>x.parent===t.id&&x._listId===t._listId).sort((a,b)=>String(a.position||'').localeCompare(String(b.position||'')));
-const cleanNotes=t=>String(t.notes||'').replace(/\[p\]|\[1\]|#foco|[⭐★]|\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]|\[vence\s*:\s*\d{4}-\d{2}-\d{2}\]/gi,'').trim();
+const cleanNotes=t=>String(t.notes||'').replace(DEADLINE_RX_G,'').replace(/\[p\]|\[1\]|#foco|[⭐★]|\[(\d+(?:[.,]\d+)?)\s*(h|hr|hrs|m|min)\]/gi,'').trim();
 const hasDetail=t=>!!cleanNotes(t)||subtasks(t).length>0;
 function linkifyPlain(s){return esc(s).replace(/https?:\/\/[^\s&lt;&gt;]+/g,url=>`<a href="${url.replace(/&amp;/g,'&')}" target="_blank" rel="noopener noreferrer">${url}</a>`)}
-function detailHTML(t){const notes=cleanNotes(t),subs=subtasks(t);return `<div class="details">${notes?`<div class="notes">${linkifyPlain(notes)}</div>`:''}${subs.length?`<div class="label muted">${subs.filter(x=>x.status==='completed').length}/${subs.length} subtareas</div>${subs.map(x=>`<div class="subtask ${x.status==='completed'?'done':''}" data-sub="${esc(x.id)}" data-sublist="${esc(x._listId)}"><button class="check ${x.status==='completed'?'done':''}" aria-label="Completar subtarea" ${x.status==='completed'?'disabled':''}></button><span>${esc(cleanTitle(x))}</span></div>`).join('')}`:''}<div class="note" style="margin-top:10px">${esc(t._list||'')} · ${dateTags(t)}</div></div>`}
+function subtaskHTML(x){const done=x.status==='completed',dated=deadlineKey(x)||dueKey(x);return `<div class="subtask ${done?'done':''}" data-sub="${esc(x.id)}" data-sublist="${esc(x._listId)}"><button class="check ${done?'done':''}" aria-label="Completar subtarea" ${done?'disabled':''}></button><span>${esc(cleanTitle(x))}${dated?`<span class="sub-date">${dateTags(x)}</span>`:''}</span></div>`}
+function detailHTML(t){const notes=cleanNotes(t),subs=subtasks(t);return `<div class="details">${notes?`<div class="notes">${linkifyPlain(notes)}</div>`:''}${subs.length?`<div class="label muted">${subs.filter(x=>x.status==='completed').length}/${subs.length} subtareas</div>${subs.map(subtaskHTML).join('')}`:''}<div class="note" style="margin-top:10px">${esc(t._list||'')} · ${dateTags(t)}</div></div>`}
 function getClientId(){return localStorage.getItem('jmh_client_id')||String(CFG.clientId||'').trim()||''}
 function initTokenClient(){if(!getClientId()||!window.google?.accounts?.oauth2)return false;S.tokenClient=google.accounts.oauth2.initTokenClient({client_id:getClientId(),scope:SCOPES,callback:async r=>{if(r.error){if(!S.silent)toast('Autorización: '+r.error);S.silent=false;return}S.silent=false;S.token=r.access_token;S.expiry=Date.now()+(Number(r.expires_in||3600)-60)*1000;sessionStorage.setItem('jmh_tok',JSON.stringify({t:S.token,e:S.expiry}));localStorage.setItem('jmh_connected','1');closeSetup();await loadAll()}});return true}
 function login(){if(!S.tokenClient&&!initTokenClient()){openSetup();return}S.tokenClient.requestAccessToken({prompt:'consent'})}
@@ -125,7 +135,8 @@ async function fetchProfile(){try{S.profile=await api('https://www.googleapis.co
 async function fetchTasks(){
  const lists=await apiPaged('https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=100');
  const sets=await Promise.all(lists.map(async l=>{
-  const url=`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(l.id)}/tasks?maxResults=100&showCompleted=true&showHidden=true`;
+  // showAssigned=true incluye tareas asignadas desde Google Docs o espacios de Chat.
+  const url=`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(l.id)}/tasks?maxResults=100&showCompleted=true&showHidden=true&showAssigned=true`;
   const items=await apiPaged(url);
   return items.map(t=>({...t,_list:l.title,_listId:l.id}));
  }));
@@ -139,7 +150,7 @@ async function fetchTasks(){
  S.lists=lists;
  S.tasks=fresh;
  return {changedDates:changes.length, changes};
-} 
+}
 async function fetchEvents(from,to){const cals=await apiPaged('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=100');const active=cals.filter(c=>c.selected!==false);const f=from.toISOString(),t=to.toISOString();const sets=await Promise.all(active.map(async c=>{try{const url=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${encodeURIComponent(f)}&timeMax=${encodeURIComponent(t)}`;return (await apiPaged(url)).filter(e=>e.status!=='cancelled').map(e=>({...e,_cal:c.summary}))}catch(_){return []}}));S.events=sets.flat().sort((a,b)=>String(a.start?.dateTime||a.start?.date||'').localeCompare(String(b.start?.dateTime||b.start?.date||'')))}
 async function patchTask(t,fields){if(!S.demo){const url=`https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(t._listId)}/tasks/${encodeURIComponent(t.id)}`;const r=await fetch(url,{method:'PATCH',headers:{Authorization:'Bearer '+S.token,'Content-Type':'application/json'},body:JSON.stringify(fields)});if(!r.ok)throw new Error('Google respondió '+r.status)}Object.assign(t,fields)}
 const tagRX={prio:/\[p\]|[⭐★]/gi,focus:/\[1\]|#foco/gi};
@@ -165,7 +176,8 @@ async function loadAll(){
   renderAll();
   $('#statusDot').className='dot live';
   const now=new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
-  $('#statusText').textContent=`Sincronizado ${now} · ${S.tasks.length} tareas · ${S.events.length} eventos`;
+  const withDeadline=S.tasks.filter(t=>t.status!=='completed'&&deadlineKey(t)).length;
+  $('#statusText').textContent=`Sincronizado ${now} · ${S.tasks.length} tareas · ${withDeadline} con fecha límite · ${S.events.length} eventos`;
   toast(taskResult.changedDates ? `Actualizado: ${taskResult.changedDates} fecha(s) de vencimiento cambiaron` : 'Tareas y fechas de vencimiento consultadas en Google');
  }catch(e){
   $('#statusText').textContent='No se pudo actualizar: '+e.message;
@@ -193,7 +205,7 @@ function completedOn(k){return S.tasks.filter(t=>isTop(t)&&t.status==='completed
 function renderAll(){S.anchor??=startDay(new Date());renderHeader();renderKPIs();renderFocus();renderAgenda();renderBoard()}
 function renderHeader(){const h=new Date().getHours(),g=h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches';$('#greeting').innerHTML=S.profile?.given_name?`${g}, <em>${esc(S.profile.given_name)}</em>`:'Agenda &amp; <em>ejecución</em>';$('#dateLine').textContent=new Date().toLocaleDateString('es-EC',{weekday:'long',day:'numeric',month:'long',year:'numeric'});const avatar=$('#avatar');if(S.profile?.picture){avatar.src=S.profile.picture;avatar.classList.remove('hidden')}else avatar.classList.add('hidden')}
 function renderKPIs(){const b=buckets();let done7=0,done30=0;for(let i=0;i<30;i++){const v=completedOn(keyOf(addDays(new Date(),-i)));done30+=v;if(i<7)done7+=v}const pct=done30+b.overdue.length?Math.round(100*done30/(done30+b.overdue.length)):0;const cards=[{l:'Vencidas',v:b.overdue.length,n:'Deuda de ejecución acumulada',alert:b.overdue.length>0},{l:'Vencen hoy',v:b.today.length,n:'Compromisos con fecha de hoy'},{l:'Resto de la semana',v:b.week.length,n:'Hasta el domingo de esta semana'},{l:'Cerradas · 7 d',v:done7,n:'Tareas cerradas en siete días'},{l:'Cumplimiento · 30 d',v:pct+'%',n:'Cerradas ÷ (cerradas + vencidas)'}];$('#kpis').innerHTML=cards.map(c=>`<div class="metric ${c.alert?'alert':''}"><span class="label ${c.alert?'':'muted'}">${c.l}</span><div class="metric-value">${c.v}</div><p class="note">${c.n}</p></div>`).join('')}
-function taskHTML(t,overdue=false){const done=t.status==='completed',P=marked(t,'prio'),F=marked(t,'focus'),subs=subtasks(t),duration=parseDur(`${t.title||''} ${t.notes||''}`),detail=hasDetail(t),expanded=detail&&S.open.has(t._listId+':'+t.id);return `<div class="item ${overdue?'overdue':''} ${done?'done':''} ${expanded?'open':''}" data-id="${esc(t.id)}" data-list="${esc(t._listId)}"><button class="check ${done?'done':''}" aria-label="Completar tarea" ${done?'disabled':''}></button><div class="item-body"><div class="item-title">${esc(cleanTitle(t))}</div><div class="meta"><span class="badge muted">${esc(t._list||'')}</span><span class="${overdue?'badge danger':''}">${dateTags(t)}</span>${duration?`<span>· ${fmtHM(duration)}</span>`:''}${subs.length?`<span>· ${subs.filter(x=>x.status==='completed').length}/${subs.length} subtareas</span>`:''}${F?'<span class="badge">Foco</span>':''}</div>${expanded?detailHTML(t):''}</div><div class="actions">${detail?`<button class="disc" data-disc aria-expanded="${expanded}" aria-label="Ver detalle">▶</button>`:''}${done?'':`<button class="mark" data-act="deadline" title="Editar fecha límite" aria-label="Editar fecha límite">▣</button><button class="mark ${P?'on':''}" data-act="prio" title="Prioridad" aria-pressed="${P}">★</button><button class="mark ${F?'on':''}" data-act="focus" title="Objetivo del día" aria-pressed="${F}">◎</button>`}</div></div>`}
+function taskHTML(t,overdue=false){const done=t.status==='completed',P=marked(t,'prio'),F=marked(t,'focus'),subs=subtasks(t),duration=parseDur(`${t.title||''} ${t.notes||''}`),detail=hasDetail(t),expanded=detail&&S.open.has(t._listId+':'+t.id);return `<div class="item ${overdue?'overdue':''} ${done?'done':''} ${expanded?'open':''}" data-id="${esc(t.id)}" data-list="${esc(t._listId)}"><button class="check ${done?'done':''}" aria-label="Completar tarea" ${done?'disabled':''}></button><div class="item-body"><div class="item-title">${esc(cleanTitle(t))}</div><div class="meta"><span class="badge muted">${esc(t._list||'')}</span>${dateTags(t)}${duration?`<span>· ${fmtHM(duration)}</span>`:''}${subs.length?`<span>· ${subs.filter(x=>x.status==='completed').length}/${subs.length} subtareas</span>`:''}${F?'<span class="badge">Foco</span>':''}</div>${expanded?detailHTML(t):''}</div><div class="actions">${detail?`<button class="disc" data-disc aria-expanded="${expanded}" aria-label="Ver detalle">▶</button>`:''}${done?'':`<button class="mark" data-act="deadline" title="Editar fecha límite" aria-label="Editar fecha límite">▣</button><button class="mark ${P?'on':''}" data-act="prio" title="Prioridad" aria-pressed="${P}">★</button><button class="mark ${F?'on':''}" data-act="focus" title="Objetivo del día" aria-pressed="${F}">◎</button>`}</div></div>`}
 function renderFocus(){const open=S.tasks.filter(t=>isTop(t)&&t.status!=='completed'),f=open.find(t=>marked(t,'focus'));$('#focusCard').innerHTML=f?`<span class="label">Objetivo único del día</span><div class="focus-title">${esc(cleanTitle(f))}</div><div class="note">${esc(f._list||'')}${effectiveKey(f)?' · Fecha de referencia '+esc(shortDate(effectiveKey(f))):''}</div><div style="margin-top:10px"><button class="tiny" data-act="focus" data-id="${esc(f.id)}" data-list="${esc(f._listId)}">Quitar foco</button></div>`:'<span class="label muted">Objetivo único del día</span><div class="focus-title"><em>Sin foco declarado</em></div><p class="note">Pulsa ◎ en cualquier tarea para fijarla como objetivo del día.</p>';const p=open.filter(t=>marked(t,'prio')).slice(0,3);$('#priorities').innerHTML=p.length?p.map(t=>taskHTML(t,!!(effectiveKey(t)&&effectiveKey(t)<todayKey()))).join(''):'<p class="empty">Pulsa ★ en hasta tres tareas para fijar prioridades.</p>'}
 const DOW=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
 function viewRange(){const a=S.anchor||startDay(new Date());if(S.view==='day')return[a,a];if(S.view==='week'){const s=addDays(a,-((a.getDay()+6)%7));return[s,addDays(s,6)]}return[new Date(a.getFullYear(),a.getMonth(),1),new Date(a.getFullYear(),a.getMonth()+1,0)]}
@@ -231,7 +243,7 @@ function renderBoard(){
    return `<div class="board-column"><div class="col-head"><span class="label ${c.id==='overdue'?'':'muted'}">${esc(c.name)}</span><span class="count">${ordered.length} · ${fmtHM(hours)}</span></div><div class="stack">${ordered.map(t=>taskHTML(t,boardDueGroup(t)==='overdue')).join('')}</div></div>`;
  }).join(''):'<p class="empty">No hay tareas que coincidan con los filtros seleccionados.</p>';
 }
-function renderDemo(){S.demo=true;S.token=null;S.profile=null;S.anchor=startDay(new Date());S.view='day';$$('#viewTabs .tab').forEach(x=>x.classList.toggle('active',x.dataset.view==='day'));const date=i=>keyOf(addDays(new Date(),i));const mk=(id,title,list,n,status='needsAction',notes='',parent=null)=>({id,title,_list:list,_listId:list,due:n===null?null:date(n)+'T00:00:00.000Z',status,notes,parent,completed:status==='completed'?new Date().toISOString():null});S.tasks=[mk('1','[1] Cerrar informe de diagnóstico [3h]','Consultoría',0,'needsAction','Revisar hallazgos y anexo estadístico.\nhttps://jmerchanhaz.com'),mk('1a','Redactar hallazgos','Consultoría',0,'completed','','1'),mk('1b','Armar anexo estadístico','Consultoría',0,'needsAction','','1'),mk('2','[P] Revisar matriz de riesgos [2h]','Consultoría',0),mk('3','[P] Preparar sesión 7 [90m]','UDLA',1),mk('4','[P] Enviar propuesta económica','Consultoría',-2),mk('5','Consolidar actas del comité','REDEIC-EC',-1),mk('6','Actualizar corpus normativo [45m]','REDEIC-EC',3),mk('7','Calificar ensayos [4h]','UDLA',4),mk('8','Agendar reunión','Consultoría',null),mk('9','Revisar estatutos','REDEIC-EC',null,'needsAction','[vence:2026-10-23]'),mk('10','Cerrar acta','Consultoría',-3,'completed')];const ev=(h,m,dur,title,list,offset=0)=>{const start=addDays(new Date(),offset);start.setHours(h,m,0,0);const end=new Date(start.getTime()+dur*60000);return {summary:title,_cal:list,start:{dateTime:start.toISOString()},end:{dateTime:end.toISOString()}}};S.events=[ev(8,30,60,'Comité técnico','Trabajo'),ev(10,30,90,'Sesión con contraparte','Trabajo'),ev(14,0,120,'Clase de Políticas Públicas','UDLA'),ev(17,0,45,'Revisión de avances','Trabajo')];for(let i=1;i<=30;i++)S.events.push(ev(9,0,120,'Bloque de trabajo','Trabajo',-i));setAuthUI(false);renderAll();$('#statusDot').className='dot demo';$('#statusText').textContent='Datos de ejemplo — nada conectado a tu cuenta'}
+function renderDemo(){S.demo=true;S.token=null;S.profile=null;S.anchor=startDay(new Date());S.view='day';$$('#viewTabs .tab').forEach(x=>x.classList.toggle('active',x.dataset.view==='day'));const date=i=>keyOf(addDays(new Date(),i));const mk=(id,title,list,n,status='needsAction',notes='',parent=null)=>({id,title,_list:list,_listId:list,due:n===null?null:date(n)+'T00:00:00.000Z',status,notes,parent,completed:status==='completed'?new Date().toISOString():null});S.tasks=[mk('1','[1] Cerrar informe de diagnóstico [3h]','Consultoría',0,'needsAction','Revisar hallazgos y anexo estadístico.\nhttps://jmerchanhaz.com'),mk('1a','Redactar hallazgos','Consultoría',0,'completed','','1'),mk('1b','Armar anexo estadístico','Consultoría',0,'needsAction',`[vence:${date(1)}]`,'1'),mk('2','[P] Revisar matriz de riesgos [2h]','Consultoría',0),mk('3','[P] Preparar sesión 7 [90m]','UDLA',1),mk('4','[P] Enviar propuesta económica','Consultoría',-2),mk('5','Consolidar actas del comité','REDEIC-EC',-1),mk('6','Actualizar corpus normativo [45m]','REDEIC-EC',3),mk('7','Calificar ensayos [4h] vence: 30/10/2026','UDLA',4),mk('8','Agendar reunión','Consultoría',null),mk('9','Revisar estatutos','REDEIC-EC',null,'needsAction','[vence:2026-10-23]'),mk('10','Cerrar acta','Consultoría',-3,'completed')];const ev=(h,m,dur,title,list,offset=0)=>{const start=addDays(new Date(),offset);start.setHours(h,m,0,0);const end=new Date(start.getTime()+dur*60000);return {summary:title,_cal:list,start:{dateTime:start.toISOString()},end:{dateTime:end.toISOString()}}};S.events=[ev(8,30,60,'Comité técnico','Trabajo'),ev(10,30,90,'Sesión con contraparte','Trabajo'),ev(14,0,120,'Clase de Políticas Públicas','UDLA'),ev(17,0,45,'Revisión de avances','Trabajo')];for(let i=1;i<=30;i++)S.events.push(ev(9,0,120,'Bloque de trabajo','Trabajo',-i));setAuthUI(false);renderAll();$('#statusDot').className='dot demo';$('#statusText').textContent='Datos de ejemplo — nada conectado a tu cuenta'}
 function goStep(n){$$('.step').forEach(x=>x.classList.toggle('hidden',x.dataset.step!==String(n)));$$('#stepDots span').forEach((x,i)=>x.classList.toggle('on',i<n));$('#originHint').textContent=location.origin}
 function openSetup(){goStep(localStorage.getItem('jmh_client_id')?3:1);$('#clientIdInput').value=localStorage.getItem('jmh_client_id')||'';$('#setupModal').classList.add('open')}
 function closeSetup(){$('#setupModal').classList.remove('open')}
@@ -247,9 +259,13 @@ async function saveDeadline(remove=false){
  if(!remove&&!validDateKey(value)){toast('Selecciona una fecha válida');return;}
  const buttons=$$('#deadlineModal button');buttons.forEach(b=>b.disabled=true);
  try{
-  const notes=String(t.notes||'').replace(/\s*\[vence\s*:\s*\d{4}-\d{2}-\d{2}\]/gi,'').trim();
-  await patchTask(t,{notes:notes+(remove?'':(notes?'\n':'')+`[vence:${value}]`)});
-  closeDeadlineEditor();renderAll();toast(S.demo?'Fecha cambiada solo en ejemplo':'Fecha límite guardada en Google Tasks');
+  // Elimina cualquier variante previa de la etiqueta, en notas y en título, para no duplicarla.
+  const notes=String(t.notes||'').replace(DEADLINE_RX_G,'').replace(/\n{3,}/g,'\n\n').trim();
+  const fields={notes:notes+(remove?'':(notes?'\n':'')+`[vence:${value}]`)};
+  const rawTitle=String(t.title||'');
+  if(DEADLINE_RX.test(rawTitle))fields.title=tidy(rawTitle.replace(DEADLINE_RX_G,''))||'(sin título)';
+  await patchTask(t,fields);
+  closeDeadlineEditor();renderAll();toast(S.demo?'Fecha cambiada solo en ejemplo':(remove?'Fecha límite eliminada en Google Tasks':'Fecha límite guardada en Google Tasks'));
  }catch(e){toast('No se pudo guardar: '+e.message)}finally{buttons.forEach(b=>b.disabled=false)}
 }
 $('#deadlineClose').addEventListener('click',closeDeadlineEditor);
